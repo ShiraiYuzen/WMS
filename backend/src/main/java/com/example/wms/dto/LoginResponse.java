@@ -1,31 +1,32 @@
 package com.example.wms.dto;
 
-/**
- * 登录响应：对齐 A 前端契约 { token, employeeNo, employeeName, role, team }。
- */
 public class LoginResponse {
     private String token;
-    private String employeeNo;
-    private String employeeName;
+    private String username;
+    private String nickname;
+    private long loginTime;
+    private long expireTime;
     private String role;
-    private String team;
 
-    public LoginResponse(String token, String employeeNo, String employeeName, String role, String team) {
+    public LoginResponse(String token, String username, String nickname, long loginTime, long expireTime, String role) {
         this.token = token;
-        this.employeeNo = employeeNo;
-        this.employeeName = employeeName;
+        this.username = username;
+        this.nickname = nickname;
+        this.loginTime = loginTime;
+        this.expireTime = expireTime;
         this.role = role;
-        this.team = team;
     }
 
     public String getToken() { return token; }
     public void setToken(String token) { this.token = token; }
-    public String getEmployeeNo() { return employeeNo; }
-    public void setEmployeeNo(String employeeNo) { this.employeeNo = employeeNo; }
-    public String getEmployeeName() { return employeeName; }
-    public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    public String getNickname() { return nickname; }
+    public void setNickname(String nickname) { this.nickname = nickname; }
+    public long getLoginTime() { return loginTime; }
+    public void setLoginTime(long loginTime) { this.loginTime = loginTime; }
+    public long getExpireTime() { return expireTime; }
+    public void setExpireTime(long expireTime) { this.expireTime = expireTime; }
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
-    public String getTeam() { return team; }
-    public void setTeam(String team) { this.team = team; }
 }
