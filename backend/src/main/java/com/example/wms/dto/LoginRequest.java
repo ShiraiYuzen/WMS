@@ -1,8 +1,5 @@
 package com.example.wms.dto;
 
-/**
- * 登录请求：密码为前端 btoa(Base64) 后的密文，与 sys_user.password 存储方式一致。
- */
 public class LoginRequest {
     private String username;
     private String password;

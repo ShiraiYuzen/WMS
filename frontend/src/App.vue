@@ -6,9 +6,6 @@
   </router-view>
 </template>
 
-<script setup>
-/**
- * 根组件。
- * 只负责承载路由出口与页面切换动画，具体布局在 layouts/MainLayout.vue。
- */
+<script setup lang="ts">
+/** 根组件：只承载路由出口与页面切换动画，布局在 views/Layout.vue */
 </script>
