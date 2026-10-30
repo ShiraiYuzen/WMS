@@ -1,0 +1,98 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+  tomcat:
+    uri-encoding: UTF-8
+
+spring:
+  application:
+    name: wms-picking-wave
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    deserialization:
+      fail-on-unknown-properties: false
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: true
+  # ===========================================================================
+  # 数据库配置预留区（当前不启用）
+  # 后续接入 MySQL 时取消注释，并把 repository 层换成 MyBatis-Plus Mapper
+  # ===========================================================================
+  # datasource:
+  #   driver-class-name: com.mysql.cj.jdbc.Driver
+  #   url: jdbc:mysql://localhost:3306/wms_picking?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+  #   username: root
+  #   password: your_password
+  #   type: com.alibaba.druid.pool.DruidDataSource
+
+# ===========================================================================
+# MyBatis-Plus 配置预留区（当前不启用）
+# ===========================================================================
+# mybatis-plus:
+#   mapper-locations: classpath*:/mapper/**/*.xml
+#   type-aliases-package: com.freshmart.wms.domain.entity
+#   global-config:
+#     db-config:
+#       id-type: auto
+#       logic-delete-field: deleted
+#       logic-delete-value: 1
+#       logic-not-delete-value: 0
+#   configuration:
+#     map-underscore-to-camel-case: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  default-flat-param-object: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ===========================================================================
+# 业务可调参数
+# ===========================================================================
+wms:
+  # 内存种子数据的规模（接数据库后此项失效）
+  mock:
+    enabled: true
+    order-count: 60
+    sku-count: 40
+    location-count: 48
+    employee-count: 12
+  # 波次生成默认参数
+  wave:
+    max-orders-per-wave: 12        # 单个波次最大订单数
+    max-skus-per-wave: 30          # 单个波次最大 SKU 数
+    max-qty-per-wave: 120          # 单个波次最大件数
+    default-strategy: BY_AREA      # BY_AREA / BY_CARRIER / BY_TIMELINESS / BY_ORDER_COUNT
+  # 效率指标阈值（用于前端着色预警）
+  metric:
+    pick-efficiency-warn: 120      # 拣货效率（件/小时）低于此值告警
+    error-rate-warn: 0.005         # 差错率高于 0.5% 告警
+    shortage-rate-warn: 0.02       # 缺货率高于 2% 告警
+    wave-duration-warn: 3600       # 波次完成时长（秒）高于此值告警
+
+logging:
+  level:
+    root: info
+    com.freshmart.wms: debug
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

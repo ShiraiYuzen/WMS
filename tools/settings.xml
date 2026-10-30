@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  项目内置 Maven 配置。
+
+  localRepository 由 tools/mvnw.sh 通过 -Dmaven.repo.local 注入，
+  这里的值仅作为「直接用 tools/apache-maven-3.9.11/bin/mvn 裸跑」时的兜底说明，
+  请按需修改为你的实际路径。
+
+  镜像仓库：如公司内网有 Nexus，把 <mirror> 打开并改成内网地址可大幅提速。
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+  <mirrors>
+    <!-- 国内镜像（可选，取消注释即可启用）
+    <mirror>
+      <id>aliyun</id>
+      <name>阿里云公共仓库</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+    -->
+  </mirrors>
+
+  <profiles>
+    <profile>
+      <id>jdk17</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+        <jdk>[17,)</jdk>
+      </activation>
+      <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+      </properties>
+    </profile>
+  </profiles>
+
+</settings>

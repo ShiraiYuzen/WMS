@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ExternalStorageConfigurationManager" enabled="true" />
+  <component name="MavenProjectsManager">
+    <option name="originalFiles">
+      <list>
+        <option value="$PROJECT_DIR$/tools/maven-repo/commons-io/commons-io/2.11.0/commons-io-2.11.0.pom" />
+        <option value="$PROJECT_DIR$/tools/maven-repo/commons-io/commons-io/2.16.1/commons-io-2.16.1.pom" />
+        <option value="$PROJECT_DIR$/tools/maven-repo/commons-codec/commons-codec/1.16.1/commons-codec-1.16.1.pom" />
+        <option value="$PROJECT_DIR$/tools/maven-repo/commons-codec/commons-codec/1.17.0/commons-codec-1.17.0.pom" />
+        <option value="$PROJECT_DIR$/tools/maven-repo/commons-codec/commons-codec/1.17.1/commons-codec-1.17.1.pom" />
+        <option value="$PROJECT_DIR$/backend/pom.xml" />
+      </list>
+    </option>
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="openjdk-27" project-jdk-type="JavaSDK">
+    <output url="file://$PROJECT_DIR$/out" />
+  </component>
+</project>
