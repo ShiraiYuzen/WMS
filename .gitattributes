@@ -1,0 +1,23 @@
+# Normalise line endings so the repository stays consistent across Windows/macOS/Linux
+* text=auto eol=lf
+
+# Scripts must keep LF, otherwise they break in bash / on Linux
+*.sh   text eol=lf
+*.py   text eol=lf
+
+# Windows-only files keep CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Binary assets — never diff or convert
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.jar  binary
+*.woff binary
+*.woff2 binary
+
+# Keep generated SQL dumps out of diffs by marking them as data
+*.sql  text

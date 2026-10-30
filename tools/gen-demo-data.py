@@ -73,24 +73,44 @@ def mysql_bin():
     return "mysql"
 
 
+def resolve_placeholder(value):
+    """展开 Spring 风格的 ${VAR:default} 占位符，保证脚本与后端读到同一个值。"""
+    m = re.fullmatch(r"\$\{([A-Za-z0-9_.]+)(?::([^}]*))?\}", value.strip())
+    if not m:
+        return value.strip()
+    return os.environ.get(m.group(1), m.group(2) if m.group(2) is not None else "")
+
+
 def load_config():
     """优先读 application.properties，环境变量可覆盖，保证与后端用的是同一个库。"""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     props = os.path.join(root, "backend", "src", "main", "resources", "application.properties")
-    cfg = {"host": "127.0.0.1", "port": "3306", "name": "wms_v4", "user": "root", "pass": "123456"}
+    cfg = {"host": "127.0.0.1", "port": "3306", "name": "wms_v4", "user": "root", "pass": ""}
 
     if os.path.exists(props):
         with open(props, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line.startswith("spring.datasource.url="):
-                    m = re.search(r"//([^:/]+):(\d+)/([^?]+)", line)
+                    m = re.search(r"//([^:/]+):(\d+)/([^?]+)", resolve_placeholder(line.split("=", 1)[1]))
                     if m:
                         cfg["host"], cfg["port"], cfg["name"] = m.group(1), m.group(2), m.group(3)
                 elif line.startswith("spring.datasource.username="):
-                    cfg["user"] = line.split("=", 1)[1].strip()
+                    cfg["user"] = resolve_placeholder(line.split("=", 1)[1])
                 elif line.startswith("spring.datasource.password="):
-                    cfg["pass"] = line.split("=", 1)[1].strip()
+                    cfg["pass"] = resolve_placeholder(line.split("=", 1)[1])
+
+        # 本地口令外置在 application-local.properties（已被 .gitignore 排除），
+        # 与后端 spring.config.import 读的是同一份，避免两边连到不同的库。
+        local_props = os.path.join(root, "backend", "application-local.properties")
+        if os.path.exists(local_props):
+            with open(local_props, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("spring.datasource.username="):
+                        cfg["user"] = resolve_placeholder(line.split("=", 1)[1])
+                    elif line.startswith("spring.datasource.password="):
+                        cfg["pass"] = resolve_placeholder(line.split("=", 1)[1])
 
     cfg["host"] = os.environ.get("WMS_DB_HOST", cfg["host"])
     cfg["port"] = os.environ.get("WMS_DB_PORT", cfg["port"])
