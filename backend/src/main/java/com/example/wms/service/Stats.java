@@ -123,8 +123,14 @@ public class Stats {
         return r;
     }
 
-    private List<Map<String, Object>> alerts(double pickEfficiency, double errorRate,
-                                             double shortageRate, double avgDuration) {
+    /**
+     * 看板告警规则。
+     *
+     * <p>纯函数：只依赖四个入参，不读取任何实例状态，所以声明为 {@code static}——
+     * 既语义正确，也让单元测试不必启动 Spring 容器或连接数据库即可直接调用。</p>
+     */
+    static List<Map<String, Object>> alerts(double pickEfficiency, double errorRate,
+                                            double shortageRate, double avgDuration) {
         List<Map<String, Object>> list = new ArrayList<>();
         if (pickEfficiency > 0 && pickEfficiency < 120) {
             list.add(alert("pickEfficiency", "拣货效率", pickEfficiency, 120, "WARN",

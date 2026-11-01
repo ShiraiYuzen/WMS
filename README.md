@@ -9,11 +9,53 @@ outbound handover → efficiency analytics** — for three operational roles: wa
 ![Vue](https://img.shields.io/badge/Vue-3.5-42b883)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479a1)
 ![License](https://img.shields.io/badge/License-MIT-blue)
+![Endpoints](https://img.shields.io/badge/REST%20endpoints-54-blueviolet)
+![Security](https://img.shields.io/badge/security%20findings-24%20tested%20%C2%B7%2012%20fixed-critical)
+![Tests](https://img.shields.io/badge/unit%20tests-JUnit%205-success)
+
+---
+
+## Highlights
+
+The parts that took real design work, rather than scaffolding a CRUD demo:
+
+- **Contract-first API.** [`docs/api-contract.md`](docs/api-contract.md) is the single source of truth for
+  all 54 endpoints: paths, parameters, response shapes, aggregate schemas and state machines. It carries a
+  sync checklist and a `grep`-based verification step, so the document cannot silently drift from the code.
+- **Server-enforced state machines.** Every transition (`WAITING → PICKING → EXCEPTION → FINISHED`) is
+  validated on the server and cannot be skipped or rolled back. This closed three findings at once
+  (`SEC-05` / `SEC-06` / `SEC-07`), where re-submission could overwrite a completed record.
+- **Role whitelist authorization.** Write endpoints are guarded by `@RequireRole` and answer **403** on
+  mismatch. The acting user is resolved **from the token**, never from a request parameter — passing
+  someone else's operator number has no effect (`SEC-08`).
+- **No-ORM by design.** `JdbcTemplate` plus a `JdbcMaps` helper converts `snake_case` columns to camelCase,
+  so 16 tables need no entity classes and every query stays visible in the service layer.
+- **Self-audited security posture.** 24 findings across white-box, black-box and concurrency rounds, each
+  with reproduction commands and impact — including the attack classes verified as *not* exploitable.
+- **Unit tests over the logic that fails silently.** Password hashing and the analytics alert thresholds are
+  covered by JUnit 5 boundary tests; see [Quality assurance](#quality-assurance).
+
+---
+
+## Quality assurance
+
+| Layer | What was done | Evidence |
+| --- | --- | --- |
+| **Security testing** | 24 findings across two rounds (white-box audit, black-box probing, concurrency): 1 critical · 7 high · 8 medium · 8 low. Every finding carries reproduction commands and impact, plus **8 attack classes verified as not exploitable** (SQL injection, token forgery, XSS, username enumeration, Actuator/Swagger exposure, TRACE, sensitive files). | [`docs/security-audit.md`](docs/security-audit.md) |
+| **Fix verification** | 12 of 24 findings fixed and re-tested item by item, with verbatim retest output and a **regression pass** confirming the normal flows still work. The remaining 12 are tracked with a phased roadmap and named residual risks — nothing is silently dropped. | [`docs/security-fixes.md`](docs/security-fixes.md) |
+| **Unit tests** | JUnit 5 suites over the pure logic: password hashing (salt randomness, plaintext and Base64 must both fail, null/blank handling, broken hashes must not throw) and every analytics alert threshold at its boundary value. | [`backend/src/test`](backend/src/test) |
+| **API contract** | Endpoint count and response shapes are machine-verifiable against the controllers through a documented `grep` check. | [`docs/api-contract.md`](docs/api-contract.md) |
+
+> The security documents were produced by auditing this codebase by hand — `curl`, the MySQL CLI, browser
+> DevTools and `npm audit`. No scanners. The point was to map the system's real limits, including the
+> places where it holds up.
 
 ---
 
 ## Table of contents
 
+- [Highlights](#highlights)
+- [Quality assurance](#quality-assurance)
 - [What this system does](#what-this-system-does)
 - [Screenshots](#screenshots)
 - [Tech stack](#tech-stack)
