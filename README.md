@@ -12,6 +12,7 @@ outbound handover → efficiency analytics** — for three operational roles: wa
 ![Endpoints](https://img.shields.io/badge/REST%20endpoints-54-blueviolet)
 ![Security](https://img.shields.io/badge/security%20findings-24%20tested%20%C2%B7%2012%20fixed-critical)
 ![Tests](https://img.shields.io/badge/unit%20tests-JUnit%205-success)
+[![CI](https://github.com/ShiraiYuzen/WMS/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiraiYuzen/WMS/actions/workflows/ci.yml)
 
 ---
 
