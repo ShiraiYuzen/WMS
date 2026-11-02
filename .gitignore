@@ -9,6 +9,13 @@ target/
 hs_err_pid*
 replay_pid*
 
+# ==================== Python / 数据脚本 ====================
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
 # ==================== Node / Vite ====================
 node_modules/
 dist/
