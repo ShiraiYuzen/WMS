@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# WMS v4 演示数据一键生成器（gen-demo-data.py 的薄封装）
+# WMS v5 演示数据一键生成器（gen-demo-data.py 的薄封装）
 #
 #   ./tools/gen-demo.sh                 续写数据到现在（已是最新则不做任何事）
 #   ./tools/gen-demo.sh --days 3        补最近 3 天

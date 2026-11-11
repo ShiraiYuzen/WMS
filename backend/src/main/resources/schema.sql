@@ -1,4 +1,4 @@
--- WMS v4 表结构（幂等：IF NOT EXISTS）。数据见同目录 seed.sql
+-- WMS v5 表结构（幂等：IF NOT EXISTS）。数据见同目录 seed.sql
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 

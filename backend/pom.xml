@@ -9,10 +9,10 @@
 		<relativePath/>
 	</parent>
 	<groupId>com.example</groupId>
-	<artifactId>wms-v4</artifactId>
-	<version>4.1.0</version>
-	<name>wms-v4</name>
-	<description>WMS v4：MyBatis-Plus 数据访问 + 分层业务</description>
+	<artifactId>wms-v5</artifactId>
+	<version>5.0</version>
+	<name>wms-v5</name>
+	<description>WMS v5.0：MyBatis-Plus 数据访问 + 分层业务</description>
 
 	<properties>
 		<java.version>27</java.version>

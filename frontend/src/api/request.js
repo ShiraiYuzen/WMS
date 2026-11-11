@@ -2,9 +2,9 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 /**
- * Axios 实例（WMS-v4）。
+ * Axios 实例（WMS-v5）。
  *
- * v4 已彻底移除前端 mock：所有请求都真实发往后端 /api，
+ * v5 已彻底移除前端 mock：所有请求都真实发往后端 /api，
  * 开发环境由 Vite 代理转发到 http://127.0.0.1:8080。
  */
 const service = axios.create({
