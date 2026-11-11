@@ -6,6 +6,7 @@ outbound handover → efficiency analytics** — for three operational roles: wa
 
 ![Java](https://img.shields.io/badge/Java-27-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.1-brightgreen)
+![MyBatis-Plus](https://img.shields.io/badge/MyBatis--Plus-3.5.18-blue)
 ![Vue](https://img.shields.io/badge/Vue-3.5-42b883)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479a1)
 ![License](https://img.shields.io/badge/License-MIT-blue)
@@ -29,8 +30,9 @@ The parts that took real design work, rather than scaffolding a CRUD demo:
 - **Role whitelist authorization.** Write endpoints are guarded by `@RequireRole` and answer **403** on
   mismatch. The acting user is resolved **from the token**, never from a request parameter — passing
   someone else's operator number has no effect (`SEC-08`).
-- **No-ORM by design.** `JdbcTemplate` plus a `JdbcMaps` helper converts `snake_case` columns to camelCase,
-  so 16 tables need no entity classes and every query stays visible in the service layer.
+- **MyBatis-Plus data access.** 16 entities + `BaseMapper`s; single-table CRUD uses `LambdaQueryWrapper` /
+  pagination plugins. Multi-table / dynamic SQL goes through `SqlSupport` (PreparedStatement + camelCase maps)
+  so complex warehouse joins stay explicit without an unsafe `${sql}` mapper.
 - **Self-audited security posture.** 24 findings across white-box, black-box and concurrency rounds, each
   with reproduction commands and impact — including the attack classes verified as *not* exploitable.
 - **Unit tests over the logic that fails silently.** Password hashing and the analytics alert thresholds are
@@ -120,14 +122,14 @@ More page-by-page screenshots (all captured against real data) live in [`shots-v
 
 | Layer | Technology |
 | --- | --- |
-| Backend | Spring Boot 4.1.1 · JDK 27 · Spring MVC · JdbcTemplate · HikariCP |
+| Backend | Spring Boot 4.1.1 · JDK 27 · Spring MVC · **MyBatis-Plus 3.5.18** · HikariCP |
 | Frontend | Vue 3.5 · Vite 8 · Element Plus 2.14 · Pinia · Vue Router · ECharts |
 | Database | MySQL 8.0 (`wms_v4`), auto-created on first boot |
 | Auth | Server-side session token (`Authorization: Bearer …`), BCrypt password hashing |
 | Build | Maven 3.9+ (backend) · npm (frontend) |
 
-The backend deliberately avoids an ORM: `JdbcMaps` converts `snake_case` columns to camelCase so the
-16 tables need no entity classes, and `Repo` centralises query and audit-log helpers.
+Single-table access uses MyBatis-Plus entities / mappers; complex dynamic SQL uses `SqlSupport`.
+Business logic lives in domain services; controllers stay thin HTTP adapters.
 
 ---
 
@@ -136,15 +138,18 @@ The backend deliberately avoids an ORM: `JdbcMaps` converts `snake_case` columns
 ```
 .
 ├── backend/                    # Spring Boot service
-│   ├── pom.xml
+│   ├── pom.xml                 # MyBatis-Plus spring-boot4-starter 3.5.18
 │   └── src/main/
 │       ├── java/com/example/wms/
-│       │   ├── config/         # TokenService, AuthInterceptor, WebConfig,
-│       │   │                   # GlobalExceptionHandler, DatabaseInitializer
-│       │   ├── common/         # Dict, JdbcMaps, PasswordHasher, AuthContext,
+│       │   ├── config/         # MybatisPlusConfig, TokenService, AuthInterceptor,
+│       │   │                   # WebConfig, GlobalExceptionHandler, DatabaseInitializer
+│       │   ├── common/         # Dict, Maps, SqlSupport, PasswordHasher, AuthContext,
 │       │   │                   # LoginUser, RequireRole, ForbiddenException
-│       │   ├── service/        # Repo (queries + audit log), Stats (metric definitions)
-│       │   ├── controller/     # 11 controllers, 54 endpoints
+│       │   ├── entity/         # 16 MyBatis-Plus entities (WmsOrder → `order`)
+│       │   ├── mapper/         # BaseMapper per table
+│       │   ├── service/        # domain services + Stats
+│       │   │   └── support/    # BizNumbers, VoAssembler, OperationLogService
+│       │   ├── controller/     # 11 thin controllers, 54 endpoints
 │       │   └── dto/            # ApiResult, PageResult, LoginRequest/Response
 │       └── resources/
 │           ├── application.properties
@@ -452,7 +457,7 @@ This is a demonstration system. **Do not deploy it to production without closing
 | B (v2) | Cleaner layering (domain/repository/service), Swagger, in-memory repository — no real database |
 | v3 | Attempt to merge A's modules into B's skeleton; workable but two code styles side by side |
 | v4.0.0 | B's UI on a rewritten backend: real MySQL, real login, mock layer removed, 56 endpoints |
-| **v4.1.0** | **Current.** Security hardening and engineering cleanup: role authorization, BCrypt, state machines, operator context, 12 findings fixed, endpoints trimmed to 54, HTTP status codes corrected, `schema.sql` + `seed.sql` split, repository made deliverable |
+| **v4.1.0** | **Current.** Security hardening and engineering cleanup: role authorization, BCrypt, state machines, operator context, 12 findings fixed, endpoints trimmed to 54, HTTP status codes corrected, `schema.sql` + `seed.sql` split; data access migrated to **MyBatis-Plus** with layered `entity` / `mapper` / `service` / `controller` packages |
 
 ---
 

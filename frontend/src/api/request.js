@@ -92,12 +92,4 @@ export function post(url, data, params) {
   return service.post(url, data, { params }).then((r) => r.data)
 }
 
-export function put(url, data, params) {
-  return service.put(url, data, { params }).then((r) => r.data)
-}
-
-export function del(url, params) {
-  return service.delete(url, { params }).then((r) => r.data)
-}
-
 export default service

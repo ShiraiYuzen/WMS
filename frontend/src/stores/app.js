@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 /**
  * 应用级状态（WMS-v4）。
@@ -70,11 +70,6 @@ export const useAppStore = defineStore('app', () => {
     localStorage.removeItem('wms_role')
   }
 
-  const isAdmin = computed(() => currentUser.value.role === 'ADMIN')
-  const isWaveOperator = computed(() => ['WAVE_OPERATOR', 'ADMIN'].includes(currentUser.value.role))
-  const isPicker = computed(() => ['PICKER', 'ADMIN'].includes(currentUser.value.role))
-  const isReviewer = computed(() => ['REVIEWER', 'ADMIN'].includes(currentUser.value.role))
-
   /** 判断某个角色编码是否可见 */
   function canAccess(roles) {
     if (!roles || !roles.length) return true
@@ -103,10 +98,6 @@ export const useAppStore = defineStore('app', () => {
     currentUser,
     setUser,
     logout,
-    isAdmin,
-    isWaveOperator,
-    isPicker,
-    isReviewer,
     canAccess,
     badge,
     setBadge

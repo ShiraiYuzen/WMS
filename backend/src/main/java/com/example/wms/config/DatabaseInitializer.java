@@ -1,13 +1,15 @@
 package com.example.wms.config;
 
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.wms.common.PasswordHasher;
+import com.example.wms.common.SqlSupport;
+import com.example.wms.mapper.CarrierMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.DatabasePopulatorUtils;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.stereotype.Component;
@@ -31,10 +33,17 @@ public class DatabaseInitializer implements ApplicationRunner {
 
     private final DataSource dataSource;
     private final String jdbcUrl;
+    private final CarrierMapper carrierMapper;
+    private final SqlSupport sql;
 
-    public DatabaseInitializer(DataSource dataSource, @Value("${spring.datasource.url}") String jdbcUrl) {
+    public DatabaseInitializer(DataSource dataSource,
+                               @Value("${spring.datasource.url}") String jdbcUrl,
+                               CarrierMapper carrierMapper,
+                               SqlSupport sql) {
         this.dataSource = dataSource;
         this.jdbcUrl = jdbcUrl;
+        this.carrierMapper = carrierMapper;
+        this.sql = sql;
     }
 
     @Override
@@ -69,7 +78,7 @@ public class DatabaseInitializer implements ApplicationRunner {
     /** 全新库判断：carrier 表还没有任何数据就认为需要灌种子 */
     private boolean needSeed() {
         try {
-            Long n = new JdbcTemplate(dataSource).queryForObject("SELECT COUNT(*) FROM carrier", Long.class);
+            Long n = carrierMapper.selectCount(Wrappers.lambdaQuery());
             return n == null || n == 0;
         } catch (Exception e) {
             log.warn("判断是否需要灌种子失败，跳过：{}", e.getMessage());
@@ -83,21 +92,20 @@ public class DatabaseInitializer implements ApplicationRunner {
      * 再用 BCrypt 重新散列写回。执行一次后所有行都是 {@code $2a$} 开头，下次启动直接跳过。
      *
      * <p>注意：PBKDF2 格式（{@code pbkdf2$…}）无法还原明文，不在这里处理，
-     * 由 {@code AuthController} 在用户下次登录成功时无感升级为 BCrypt。</p>
+     * 由 {@code AuthService} 在用户下次登录成功时无感升级为 BCrypt。</p>
      */
     private void migrateLegacyPasswords() {
         try {
-            JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-            List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, username, password FROM sys_user");
+            List<Map<String, Object>> rows = sql.list("SELECT id, username, password FROM sys_user");
             int upgraded = 0;
             for (Map<String, Object> row : rows) {
                 Object id = row.get("id");
                 String stored = row.get("password") == null ? null : String.valueOf(row.get("password"));
-                String plain = PasswordHasher.decodeLegacy(stored);   // BCrypt / PBKDF2 会返回 null
+                String plain = PasswordHasher.decodeLegacy(stored);
                 if (plain == null || plain.isBlank()) {
                     continue;
                 }
-                int n = jdbc.update("UPDATE sys_user SET password=? WHERE id=? AND password=?",
+                int n = sql.update("UPDATE sys_user SET password=? WHERE id=? AND password=?",
                         PasswordHasher.hash(plain), id, stored);
                 if (n > 0) {
                     upgraded++;

@@ -1,8 +1,8 @@
 package com.example.wms.service;
 
 import com.example.wms.common.Dict;
-import com.example.wms.common.JdbcMaps;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.example.wms.common.SqlSupport;
+import com.example.wms.service.support.BizNumbers;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -14,14 +14,10 @@ import java.util.*;
 @Component
 public class Stats {
 
-    private final Repo repo;
+    private final SqlSupport sql;
 
-    public Stats(Repo repo) {
-        this.repo = repo;
-    }
-
-    private JdbcTemplate jdbc() {
-        return repo.jdbc();
+    public Stats(SqlSupport sql) {
+        this.sql = sql;
     }
 
     // ---------------- 通用 ----------------
@@ -76,50 +72,45 @@ public class Stats {
     public Map<String, Object> overview(String start, String end) {
         // 任务：仅已完成/异常，按完成时间（或创建时间）落在区间
         List<Object> ta = new ArrayList<>();
-        Map<String, Object> taskAgg = JdbcMaps.one(jdbc(),
-                "SELECT COALESCE(SUM(actual_qty),0) picked, COALESCE(SUM(duration_sec),0) sec, " +
+        Map<String, Object> taskAgg = sql.one(                "SELECT COALESCE(SUM(actual_qty),0) picked, COALESCE(SUM(duration_sec),0) sec, " +
                         "COALESCE(SUM(should_qty),0) shouldQty, COALESCE(SUM(shortage_qty),0) shortage, COUNT(*) cnt " +
                         "FROM pick_task WHERE status IN ('FINISHED','EXCEPTION')" + rangeEff(start, end, ta),
                 ta.toArray());
-        double pickedQty = taskAgg == null ? 0 : Repo.d(taskAgg.get("picked"));
-        double pickSeconds = taskAgg == null ? 0 : Repo.d(taskAgg.get("sec"));
-        double shouldQty = taskAgg == null ? 0 : Repo.d(taskAgg.get("shouldQty"));
-        double shortageQty = taskAgg == null ? 0 : Repo.d(taskAgg.get("shortage"));
-        long taskCount = taskAgg == null ? 0 : Repo.i(taskAgg.get("cnt"));
+        double pickedQty = taskAgg == null ? 0 : BizNumbers.d(taskAgg.get("picked"));
+        double pickSeconds = taskAgg == null ? 0 : BizNumbers.d(taskAgg.get("sec"));
+        double shouldQty = taskAgg == null ? 0 : BizNumbers.d(taskAgg.get("shouldQty"));
+        double shortageQty = taskAgg == null ? 0 : BizNumbers.d(taskAgg.get("shortage"));
+        long taskCount = taskAgg == null ? 0 : BizNumbers.i(taskAgg.get("cnt"));
 
         // 复核：按完成时间（或创建时间）落在区间
         List<Object> ra = new ArrayList<>();
-        Map<String, Object> revAgg = JdbcMaps.one(jdbc(),
-                "SELECT COUNT(*) total, SUM(CASE WHEN status='PASS' THEN 1 ELSE 0 END) passCnt, " +
+        Map<String, Object> revAgg = sql.one(                "SELECT COUNT(*) total, SUM(CASE WHEN status='PASS' THEN 1 ELSE 0 END) passCnt, " +
                         "SUM(CASE WHEN status='DIFF' THEN 1 ELSE 0 END) diffCnt " +
                         "FROM review WHERE 1=1" + rangeEff(start, end, ra),
                 ra.toArray());
-        long reviewTotal = revAgg == null ? 0 : Repo.i(revAgg.get("total"));
-        long passCount = revAgg == null ? 0 : Repo.i(revAgg.get("passCnt"));
-        long diffCount = revAgg == null ? 0 : Repo.i(revAgg.get("diffCnt"));
+        long reviewTotal = revAgg == null ? 0 : BizNumbers.i(revAgg.get("total"));
+        long passCount = revAgg == null ? 0 : BizNumbers.i(revAgg.get("passCnt"));
+        long diffCount = revAgg == null ? 0 : BizNumbers.i(revAgg.get("diffCnt"));
 
         Map<String, Object> r = new LinkedHashMap<>();
-        r.put("totalOrders", JdbcMaps.count(jdbc(), "SELECT COUNT(*) FROM `order`"));
-        r.put("pendingOrders", JdbcMaps.count(jdbc(), "SELECT COUNT(*) FROM `order` WHERE status='CREATED'"));
-        r.put("pooledOrders", JdbcMaps.count(jdbc(), "SELECT COUNT(*) FROM `order` WHERE status='POOLED'"));
-        r.put("totalWaves", JdbcMaps.count(jdbc(), "SELECT COUNT(*) FROM wave"));
-        r.put("workingWaves", JdbcMaps.count(jdbc(),
-                "SELECT COUNT(*) FROM wave WHERE status IN ('ASSIGNED','PICKING','REVIEWING')"));
-        r.put("finishedWaves", JdbcMaps.count(jdbc(),
-                "SELECT COUNT(*) FROM wave WHERE status IN ('HANDOVERED','CLOSED')"));
+        r.put("totalOrders", sql.count( "SELECT COUNT(*) FROM `order`"));
+        r.put("pendingOrders", sql.count( "SELECT COUNT(*) FROM `order` WHERE status='CREATED'"));
+        r.put("pooledOrders", sql.count( "SELECT COUNT(*) FROM `order` WHERE status='POOLED'"));
+        r.put("totalWaves", sql.count( "SELECT COUNT(*) FROM wave"));
+        r.put("workingWaves", sql.count(                "SELECT COUNT(*) FROM wave WHERE status IN ('ASSIGNED','PICKING','REVIEWING')"));
+        r.put("finishedWaves", sql.count(                "SELECT COUNT(*) FROM wave WHERE status IN ('HANDOVERED','CLOSED')"));
         r.put("pickedQty", Math.round(pickedQty));
-        r.put("outboundOrders", JdbcMaps.count(jdbc(), "SELECT COUNT(*) FROM `order` WHERE status='OUTBOUND'"));
-        r.put("handedPackages", JdbcMaps.count(jdbc(),
-                "SELECT COALESCE(SUM(package_count),0) FROM handover WHERE status='CONFIRMED'"));
+        r.put("outboundOrders", sql.count( "SELECT COUNT(*) FROM `order` WHERE status='OUTBOUND'"));
+        r.put("handedPackages", sql.count(                "SELECT COALESCE(SUM(package_count),0) FROM handover WHERE status='CONFIRMED'"));
         double pickEfficiency = pickSeconds > 0 ? round(pickedQty * 3600d / pickSeconds, 2) : 0d;
         r.put("pickEfficiency", pickEfficiency);
         r.put("avgPickDurationSec", taskCount > 0 ? round(pickSeconds / taskCount, 2) : 0d);
         r.put("errorRate", reviewTotal > 0 ? round((double) diffCount / reviewTotal, 4) : 0d);
         r.put("shortageRate", shouldQty > 0 ? round(shortageQty / shouldQty, 4) : 0d);
         r.put("reviewPassRate", reviewTotal > 0 ? round((double) passCount / reviewTotal, 4) : 0d);
-        r.put("pendingShortageCount", JdbcMaps.count(jdbc(), "SELECT COUNT(*) FROM shortage WHERE status='PENDING'"));
-        r.put("alerts", alerts(pickEfficiency, Repo.d(r.get("errorRate")), Repo.d(r.get("shortageRate")),
-                Repo.d(r.get("avgPickDurationSec"))));
+        r.put("pendingShortageCount", sql.count( "SELECT COUNT(*) FROM shortage WHERE status='PENDING'"));
+        r.put("alerts", alerts(pickEfficiency, BizNumbers.d(r.get("errorRate")), BizNumbers.d(r.get("shortageRate")),
+                BizNumbers.d(r.get("avgPickDurationSec"))));
         return r;
     }
 
@@ -188,45 +179,42 @@ public class Stats {
             buckets.put(d.toString(), emptyBucket(d.toString()));
         }
 
-        for (Map<String, Object> w : JdbcMaps.list(jdbc(),
-                "SELECT LEFT(create_time,10) k, COUNT(*) waveCount, COALESCE(SUM(order_count),0) orderCount, " +
+        for (Map<String, Object> w : sql.list(                "SELECT LEFT(create_time,10) k, COUNT(*) waveCount, COALESCE(SUM(order_count),0) orderCount, " +
                         "COALESCE(SUM(pick_duration_sec),0) dur " +
                         "FROM wave WHERE create_time IS NOT NULL GROUP BY LEFT(create_time,10)")) {
-            Map<String, Object> b = buckets.get(Repo.str(w.get("k")));
+            Map<String, Object> b = buckets.get(BizNumbers.str(w.get("k")));
             if (b == null) continue;
-            b.put("waveCount", Repo.i(w.get("waveCount")));
-            b.put("orderCount", Repo.i(w.get("orderCount")));
-            b.put("_durSum", Repo.d(w.get("dur")));
+            b.put("waveCount", BizNumbers.i(w.get("waveCount")));
+            b.put("orderCount", BizNumbers.i(w.get("orderCount")));
+            b.put("_durSum", BizNumbers.d(w.get("dur")));
         }
 
         // 拣货维度按「完成日」统计实际产出与耗时：拿 wave.total_qty 当件数是计划量，
         // 波次还没拣完也算进去，效率会被摊成 0。
         List<Object> ta = new ArrayList<>();
-        for (Map<String, Object> t : JdbcMaps.list(jdbc(),
-                "SELECT LEFT(COALESCE(finish_time, create_time),10) k, COALESCE(SUM(shortage_qty),0) shortage, " +
+        for (Map<String, Object> t : sql.list(                "SELECT LEFT(COALESCE(finish_time, create_time),10) k, COALESCE(SUM(shortage_qty),0) shortage, " +
                         "COALESCE(SUM(actual_qty),0) picked, COALESCE(SUM(duration_sec),0) sec " +
                         "FROM pick_task WHERE status IN ('FINISHED','EXCEPTION')" +
                         rangeEff(startDate.toString(), endDate.toString(), ta) +
                         " GROUP BY LEFT(COALESCE(finish_time, create_time),10)", ta.toArray())) {
-            Map<String, Object> b = buckets.get(Repo.str(t.get("k")));
+            Map<String, Object> b = buckets.get(BizNumbers.str(t.get("k")));
             if (b != null) {
-                b.put("shortageQty", Repo.i(t.get("shortage")));
-                b.put("pickedQty", Repo.i(t.get("picked")));
-                b.put("_pickSec", Repo.d(t.get("sec")));
+                b.put("shortageQty", BizNumbers.i(t.get("shortage")));
+                b.put("pickedQty", BizNumbers.i(t.get("picked")));
+                b.put("_pickSec", BizNumbers.d(t.get("sec")));
             }
         }
 
         List<Object> ra = new ArrayList<>();
-        for (Map<String, Object> rv : JdbcMaps.list(jdbc(),
-                "SELECT LEFT(COALESCE(finish_time, create_time),10) k, COUNT(*) total, " +
+        for (Map<String, Object> rv : sql.list(                "SELECT LEFT(COALESCE(finish_time, create_time),10) k, COUNT(*) total, " +
                         "SUM(CASE WHEN status='DIFF' THEN 1 ELSE 0 END) diff " +
                         "FROM review WHERE status<>'WAITING'" +
                         rangeEff(startDate.toString(), endDate.toString(), ra) +
                         " GROUP BY LEFT(COALESCE(finish_time, create_time),10)", ra.toArray())) {
-            Map<String, Object> b = buckets.get(Repo.str(rv.get("k")));
+            Map<String, Object> b = buckets.get(BizNumbers.str(rv.get("k")));
             if (b != null) {
-                b.put("_reviewTotal", Repo.i(rv.get("total")));
-                b.put("_diffTotal", Repo.i(rv.get("diff")));
+                b.put("_reviewTotal", BizNumbers.i(rv.get("total")));
+                b.put("_diffTotal", BizNumbers.i(rv.get("diff")));
             }
         }
 
@@ -242,40 +230,37 @@ public class Stats {
             buckets.put(hh, emptyBucket(d + " " + hh + ":00"));
         }
 
-        for (Map<String, Object> w : JdbcMaps.list(jdbc(),
-                "SELECT substr(create_time,12,2) k, COUNT(*) waveCount, COALESCE(SUM(order_count),0) orderCount, " +
+        for (Map<String, Object> w : sql.list(                "SELECT substr(create_time,12,2) k, COUNT(*) waveCount, COALESCE(SUM(order_count),0) orderCount, " +
                         "COALESCE(SUM(pick_duration_sec),0) dur " +
                         "FROM wave WHERE create_time LIKE ? GROUP BY substr(create_time,12,2)", d + "%")) {
-            Map<String, Object> b = buckets.get(Repo.str(w.get("k")));
+            Map<String, Object> b = buckets.get(BizNumbers.str(w.get("k")));
             if (b == null) continue;
-            b.put("waveCount", Repo.i(w.get("waveCount")));
-            b.put("orderCount", Repo.i(w.get("orderCount")));
-            b.put("_durSum", Repo.d(w.get("dur")));
+            b.put("waveCount", BizNumbers.i(w.get("waveCount")));
+            b.put("orderCount", BizNumbers.i(w.get("orderCount")));
+            b.put("_durSum", BizNumbers.d(w.get("dur")));
         }
 
-        for (Map<String, Object> t : JdbcMaps.list(jdbc(),
-                "SELECT substr(COALESCE(finish_time, create_time),12,2) k, COALESCE(SUM(shortage_qty),0) shortage, " +
+        for (Map<String, Object> t : sql.list(                "SELECT substr(COALESCE(finish_time, create_time),12,2) k, COALESCE(SUM(shortage_qty),0) shortage, " +
                         "COALESCE(SUM(actual_qty),0) picked, COALESCE(SUM(duration_sec),0) sec " +
                         "FROM pick_task WHERE status IN ('FINISHED','EXCEPTION') " +
                         "AND LEFT(COALESCE(finish_time, create_time),10)=? " +
                         "GROUP BY substr(COALESCE(finish_time, create_time),12,2)", d)) {
-            Map<String, Object> b = buckets.get(Repo.str(t.get("k")));
+            Map<String, Object> b = buckets.get(BizNumbers.str(t.get("k")));
             if (b != null) {
-                b.put("shortageQty", Repo.i(t.get("shortage")));
-                b.put("pickedQty", Repo.i(t.get("picked")));
-                b.put("_pickSec", Repo.d(t.get("sec")));
+                b.put("shortageQty", BizNumbers.i(t.get("shortage")));
+                b.put("pickedQty", BizNumbers.i(t.get("picked")));
+                b.put("_pickSec", BizNumbers.d(t.get("sec")));
             }
         }
 
-        for (Map<String, Object> rv : JdbcMaps.list(jdbc(),
-                "SELECT substr(COALESCE(finish_time, create_time),12,2) k, COUNT(*) total, " +
+        for (Map<String, Object> rv : sql.list(                "SELECT substr(COALESCE(finish_time, create_time),12,2) k, COUNT(*) total, " +
                         "SUM(CASE WHEN status='DIFF' THEN 1 ELSE 0 END) diff " +
                         "FROM review WHERE status<>'WAITING' AND LEFT(COALESCE(finish_time, create_time),10)=? " +
                         "GROUP BY substr(COALESCE(finish_time, create_time),12,2)", d)) {
-            Map<String, Object> b = buckets.get(Repo.str(rv.get("k")));
+            Map<String, Object> b = buckets.get(BizNumbers.str(rv.get("k")));
             if (b != null) {
-                b.put("_reviewTotal", Repo.i(rv.get("total")));
-                b.put("_diffTotal", Repo.i(rv.get("diff")));
+                b.put("_reviewTotal", BizNumbers.i(rv.get("total")));
+                b.put("_diffTotal", BizNumbers.i(rv.get("diff")));
             }
         }
 
@@ -303,12 +288,12 @@ public class Stats {
     private static List<Map<String, Object>> finish(Map<String, Map<String, Object>> buckets) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> b : buckets.values()) {
-            int reviewTotal = Repo.i(b.remove("_reviewTotal"));
-            int diffTotal = Repo.i(b.remove("_diffTotal"));
-            double durSum = Repo.d(b.remove("_durSum"));
-            double pickSec = Repo.d(b.remove("_pickSec"));
-            int waveCount = Repo.i(b.get("waveCount"));
-            int picked = Repo.i(b.get("pickedQty"));
+            int reviewTotal = BizNumbers.i(b.remove("_reviewTotal"));
+            int diffTotal = BizNumbers.i(b.remove("_diffTotal"));
+            double durSum = BizNumbers.d(b.remove("_durSum"));
+            double pickSec = BizNumbers.d(b.remove("_pickSec"));
+            int waveCount = BizNumbers.i(b.get("waveCount"));
+            int picked = BizNumbers.i(b.get("pickedQty"));
             b.put("errorRate", reviewTotal > 0 ? round((double) diffTotal / reviewTotal, 4) : 0d);
             b.put("avgDurationSec", waveCount > 0 ? round(durSum / waveCount, 2) : 0d);
             // 没有耗时记录就是「无数据」，给 null 让曲线断开；给 0 会被误读成「效率归零」
@@ -322,33 +307,30 @@ public class Stats {
     // ---------------- 员工效率 ----------------
 
     public List<Map<String, Object>> employeeEfficiency(String start, String end, String employeeNo) {
-        List<Map<String, Object>> employees = JdbcMaps.list(jdbc(),
-                "SELECT * FROM employee WHERE role IN ('PICKER','REVIEWER') AND status=1 ORDER BY employee_no");
+        List<Map<String, Object>> employees = sql.list(                "SELECT * FROM employee WHERE role IN ('PICKER','REVIEWER') AND status=1 ORDER BY employee_no");
 
         Map<String, Map<String, Object>> taskAgg = new HashMap<>();
         List<Object> ta = new ArrayList<>();
-        for (Map<String, Object> row : JdbcMaps.list(jdbc(),
-                "SELECT picker_no, COUNT(*) cnt, COALESCE(SUM(actual_qty),0) qty, " +
+        for (Map<String, Object> row : sql.list(                "SELECT picker_no, COUNT(*) cnt, COALESCE(SUM(actual_qty),0) qty, " +
                         "COALESCE(SUM(duration_sec),0) sec, COALESCE(SUM(location_count),0) locs " +
                         "FROM pick_task WHERE status IN ('FINISHED','EXCEPTION') AND picker_no IS NOT NULL" +
                         rangeEff(start, end, ta) + " GROUP BY picker_no", ta.toArray())) {
-            taskAgg.put(Repo.str(row.get("pickerNo")), row);
+            taskAgg.put(BizNumbers.str(row.get("pickerNo")), row);
         }
 
         Map<String, Map<String, Object>> revAgg = new HashMap<>();
         List<Object> ra = new ArrayList<>();
-        for (Map<String, Object> row : JdbcMaps.list(jdbc(),
-                "SELECT reviewer_no, COUNT(*) cnt, SUM(CASE WHEN status='DIFF' THEN 1 ELSE 0 END) errs, " +
+        for (Map<String, Object> row : sql.list(                "SELECT reviewer_no, COUNT(*) cnt, SUM(CASE WHEN status='DIFF' THEN 1 ELSE 0 END) errs, " +
                         "COALESCE(SUM(duration_sec),0) sec FROM review WHERE reviewer_no IS NOT NULL" +
                         rangeEff(start, end, ra) + " GROUP BY reviewer_no", ra.toArray())) {
-            revAgg.put(Repo.str(row.get("reviewerNo")), row);
+            revAgg.put(BizNumbers.str(row.get("reviewerNo")), row);
         }
 
         List<Map<String, Object>> list = new ArrayList<>();
         for (Map<String, Object> e : employees) {
-            String no = Repo.str(e.get("employeeNo"));
+            String no = BizNumbers.str(e.get("employeeNo"));
             if (employeeNo != null && !employeeNo.isBlank() && !employeeNo.equals(no)) continue;
-            String role = Repo.str(e.get("role"));
+            String role = BizNumbers.str(e.get("role"));
 
             Map<String, Object> vo = new LinkedHashMap<>();
             vo.put("employeeNo", no);
@@ -369,23 +351,23 @@ public class Stats {
             if ("PICKER".equals(role)) {
                 Map<String, Object> agg = taskAgg.get(no);
                 if (agg != null) {
-                    int count = Repo.i(agg.get("cnt"));
-                    double qty = Repo.d(agg.get("qty"));
-                    double sec = Repo.d(agg.get("sec"));
+                    int count = BizNumbers.i(agg.get("cnt"));
+                    double qty = BizNumbers.d(agg.get("qty"));
+                    double sec = BizNumbers.d(agg.get("sec"));
                     double qtyPerHour = sec > 0 ? round(qty * 3600d / sec, 2) : 0d;
                     vo.put("taskCount", count);
                     vo.put("pickedQty", Math.round(qty));
                     vo.put("qtyPerHour", qtyPerHour);
                     vo.put("avgDurationSec", count > 0 ? round(sec / count, 2) : 0d);
-                    vo.put("locationCount", Repo.i(agg.get("locs")));
+                    vo.put("locationCount", BizNumbers.i(agg.get("locs")));
                     vo.put("score", round(Math.min(100d, qtyPerHour / 120d * 70d) + 30d, 2));
                 }
             } else {
                 Map<String, Object> agg = revAgg.get(no);
                 if (agg != null) {
-                    int count = Repo.i(agg.get("cnt"));
-                    int errs = Repo.i(agg.get("errs"));
-                    double sec = Repo.d(agg.get("sec"));
+                    int count = BizNumbers.i(agg.get("cnt"));
+                    int errs = BizNumbers.i(agg.get("errs"));
+                    double sec = BizNumbers.d(agg.get("sec"));
                     double errorRate = count > 0 ? round((double) errs / count, 4) : 0d;
                     vo.put("reviewCount", count);
                     vo.put("errorCount", errs);
@@ -397,7 +379,7 @@ public class Stats {
             }
             list.add(vo);
         }
-        list.sort((a, b) -> Double.compare(Repo.d(b.get("score")), Repo.d(a.get("score"))));
+        list.sort((a, b) -> Double.compare(BizNumbers.d(b.get("score")), BizNumbers.d(a.get("score"))));
         return list;
     }
 
@@ -405,37 +387,33 @@ public class Stats {
 
     public Map<String, Object> errorRate(String start, String end) {
         List<Object> ra = new ArrayList<>();
-        Map<String, Object> agg = JdbcMaps.one(jdbc(),
-                "SELECT COUNT(*) total, SUM(CASE WHEN status='PASS' THEN 1 ELSE 0 END) passCnt, " +
+        Map<String, Object> agg = sql.one(                "SELECT COUNT(*) total, SUM(CASE WHEN status='PASS' THEN 1 ELSE 0 END) passCnt, " +
                         "SUM(CASE WHEN status='DIFF' THEN 1 ELSE 0 END) diffCnt FROM review WHERE 1=1" +
                         rangeEff(start, end, ra), ra.toArray());
-        long total = agg == null ? 0 : Repo.i(agg.get("total"));
-        long pass = agg == null ? 0 : Repo.i(agg.get("passCnt"));
-        long diff = agg == null ? 0 : Repo.i(agg.get("diffCnt"));
+        long total = agg == null ? 0 : BizNumbers.i(agg.get("total"));
+        long pass = agg == null ? 0 : BizNumbers.i(agg.get("passCnt"));
+        long diff = agg == null ? 0 : BizNumbers.i(agg.get("diffCnt"));
 
         List<Object> da = new ArrayList<>();
-        Map<String, Object> diffAgg = JdbcMaps.one(jdbc(),
-                "SELECT COALESCE(SUM(ABS(diff_qty)),0) qty FROM review_diff WHERE 1=1" +
+        Map<String, Object> diffAgg = sql.one(                "SELECT COALESCE(SUM(ABS(diff_qty)),0) qty FROM review_diff WHERE 1=1" +
                         range("create_time", start, end, da), da.toArray());
-        long diffQtyTotal = diffAgg == null ? 0 : Math.round(Repo.d(diffAgg.get("qty")));
+        long diffQtyTotal = diffAgg == null ? 0 : Math.round(BizNumbers.d(diffAgg.get("qty")));
 
         List<Object> td = new ArrayList<>();
-        List<Map<String, Object>> typeRows = JdbcMaps.list(jdbc(),
-                "SELECT COALESCE(diff_type,'UNKNOWN') code, COUNT(*) cnt FROM review_diff WHERE 1=1" +
+        List<Map<String, Object>> typeRows = sql.list(                "SELECT COALESCE(diff_type,'UNKNOWN') code, COUNT(*) cnt FROM review_diff WHERE 1=1" +
                         range("create_time", start, end, td) + " GROUP BY COALESCE(diff_type,'UNKNOWN') ORDER BY cnt DESC",
                 td.toArray());
         List<Map<String, Object>> typeDistribution = distribution(typeRows, "diffType");
 
         List<Object> sd = new ArrayList<>();
-        List<Map<String, Object>> stageRows = JdbcMaps.list(jdbc(),
-                "SELECT COALESCE(responsible_stage,'UNKNOWN') code, COUNT(*) cnt FROM review_diff WHERE 1=1" +
+        List<Map<String, Object>> stageRows = sql.list(                "SELECT COALESCE(responsible_stage,'UNKNOWN') code, COUNT(*) cnt FROM review_diff WHERE 1=1" +
                         range("create_time", start, end, sd) + " GROUP BY COALESCE(responsible_stage,'UNKNOWN') ORDER BY cnt DESC",
                 sd.toArray());
         List<Map<String, Object>> stageDistribution = new ArrayList<>();
-        long stageTotal = stageRows.stream().mapToLong(x -> Repo.i(x.get("cnt"))).sum();
+        long stageTotal = stageRows.stream().mapToLong(x -> BizNumbers.i(x.get("cnt"))).sum();
         for (Map<String, Object> row : stageRows) {
-            String code = Repo.str(row.get("code"));
-            int count = Repo.i(row.get("cnt"));
+            String code = BizNumbers.str(row.get("code"));
+            int count = BizNumbers.i(row.get("cnt"));
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("code", code);
             m.put("name", stageName(code));
@@ -447,11 +425,11 @@ public class Stats {
         List<Map<String, Object>> employees = employeeEfficiency(start, end, null);
         List<Map<String, Object>> topErrorEmployees = new ArrayList<>();
         for (Map<String, Object> e : employees) {
-            if ("复核员".equals(Repo.str(e.get("roleDesc"))) && Repo.i(e.get("errorCount")) > 0) {
+            if ("复核员".equals(BizNumbers.str(e.get("roleDesc"))) && BizNumbers.i(e.get("errorCount")) > 0) {
                 topErrorEmployees.add(e);
             }
         }
-        topErrorEmployees.sort((a, b) -> Double.compare(Repo.d(b.get("errorRate")), Repo.d(a.get("errorRate"))));
+        topErrorEmployees.sort((a, b) -> Double.compare(BizNumbers.d(b.get("errorRate")), BizNumbers.d(a.get("errorRate"))));
         if (topErrorEmployees.size() > 5) topErrorEmployees = new ArrayList<>(topErrorEmployees.subList(0, 5));
 
         Map<String, Object> r = new LinkedHashMap<>();
@@ -467,11 +445,11 @@ public class Stats {
     }
 
     private List<Map<String, Object>> distribution(List<Map<String, Object>> rows, String dictGroup) {
-        long total = rows.stream().mapToLong(x -> Repo.i(x.get("cnt"))).sum();
+        long total = rows.stream().mapToLong(x -> BizNumbers.i(x.get("cnt"))).sum();
         List<Map<String, Object>> list = new ArrayList<>();
         for (Map<String, Object> row : rows) {
-            String code = Repo.str(row.get("code"));
-            int count = Repo.i(row.get("cnt"));
+            String code = BizNumbers.str(row.get("code"));
+            int count = BizNumbers.i(row.get("cnt"));
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("code", code);
             m.put("name", Dict.desc(dictGroup, code));
@@ -496,14 +474,13 @@ public class Stats {
 
     public List<Map<String, Object>> shortageDistribution(String start, String end) {
         List<Object> a = new ArrayList<>();
-        List<Map<String, Object>> rows = JdbcMaps.list(jdbc(),
-                "SELECT reason code, COUNT(*) cnt FROM shortage WHERE 1=1" +
+        List<Map<String, Object>> rows = sql.list(                "SELECT reason code, COUNT(*) cnt FROM shortage WHERE 1=1" +
                         rangeReport(start, end, a) + " GROUP BY reason ORDER BY cnt DESC", a.toArray());
-        long total = rows.stream().mapToLong(x -> Repo.i(x.get("cnt"))).sum();
+        long total = rows.stream().mapToLong(x -> BizNumbers.i(x.get("cnt"))).sum();
         List<Map<String, Object>> list = new ArrayList<>();
         for (Map<String, Object> row : rows) {
-            String code = Repo.str(row.get("code"));
-            int count = Repo.i(row.get("cnt"));
+            String code = BizNumbers.str(row.get("code"));
+            int count = BizNumbers.i(row.get("cnt"));
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("code", code);
             m.put("name", Dict.desc("shortageReason", code));

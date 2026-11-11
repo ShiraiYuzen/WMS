@@ -116,17 +116,3 @@ export const baseApi = {
 export const logApi = {
   trace: (bizNo) => get('/log/trace', { bizNo })
 }
-
-export default {
-  authApi,
-  dashboardApi,
-  orderApi,
-  waveApi,
-  pickApi,
-  shortageApi,
-  reviewApi,
-  handoverApi,
-  analyticsApi,
-  baseApi,
-  logApi
-}
