@@ -1,4 +1,4 @@
-﻿package com.example.wms.service;
+package com.example.wms.service;
 
 import com.example.wms.common.AuthContext;
 import com.example.wms.common.Dict;
@@ -161,7 +161,7 @@ public class HandoverService {
 
     private static List<String> splitWaves(String waveNos) {
         if (waveNos == null || waveNos.isBlank()) return Collections.emptyList();
-        return Arrays.asList(waveNos.split(",");
+        return Arrays.asList(waveNos.split(","));
     }
 
     private static boolean notBlank(String s) {
