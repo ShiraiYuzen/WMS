@@ -33,6 +33,7 @@ import random
 import re
 import subprocess
 import sys
+import tempfile
 
 REMARK = "DEMO-GEN"
 SEED = 20261029
@@ -698,7 +699,8 @@ def main():
     ap.add_argument("--end", help="结束时间，默认当前时刻")
     ap.add_argument("--dry-run", action="store_true", help="只打印 SQL，不写库")
     ap.add_argument("--no-verify", action="store_true", help="跳过写入前自检")
-    ap.add_argument("--out", default="/tmp/wms_gen.sql", help="SQL 输出路径（默认 /tmp/wms_gen.sql）")
+    ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "wms_gen.sql"),
+                    help="SQL 输出路径（默认系统临时目录下的 wms_gen.sql）")
     args = ap.parse_args()
 
     now = dt.datetime.now().replace(second=0, microsecond=0)
