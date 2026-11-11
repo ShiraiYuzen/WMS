@@ -3,11 +3,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 /**
- * Vite 配置（WMS-v4）。
+ * Vite 配置（WMS-v5）。
  *
  * 关键点：
  *  1. @ 别名指向 src
- *  2. /api 代理到 v4 后端 http://127.0.0.1:8080（真实数据库，无 mock）
+ *  2. /api 代理到 v5 后端 http://127.0.0.1:8080（真实数据库，无 mock）
  *  3. Element Plus 采用全量引入（见 main.js），省掉自动导入插件的版本适配成本。
  */
 export default defineConfig(({ mode }) => ({

@@ -154,7 +154,7 @@ router.afterEach((to) => {
 })
 
 /**
- * 登录守卫（WMS-v4 已接真实后端，未登录一律回登录页）。
+ * 登录守卫（WMS-v5 已接真实后端，未登录一律回登录页）。
  * 角色校验读 localStorage，避免在 router 初始化阶段依赖 Pinia 实例。
  */
 router.beforeEach((to) => {

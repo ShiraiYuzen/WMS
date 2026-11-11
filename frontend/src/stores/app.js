@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 /**
- * 应用级状态（WMS-v4）。
+ * 应用级状态（WMS-v5）。
  *
  * 已接入真实登录：用户信息来自 POST /api/auth/login 的返回，
  * 持久化在 localStorage.wms_user，token 存在 localStorage.wms_token。

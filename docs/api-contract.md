@@ -1,78 +1,67 @@
-# WMS v4.1.0 — API Contract
+# WMS v5.0 — 接口契约
 
-> This document is the **source of truth** for the v4 frontend/backend interface: paths, parameters,
-> response shapes and state machines. After changing a controller, sync this file following the checklist
-> in [section 7](#7-maintenance).
+> 本文是 v5.0 前后端接口的**唯一依据**：路径、参数、响应形状和状态机。改了控制器之后，按[第 7 节](#7-维护)的清单同步本文。
 
-| Item | Value |
+| 项 | 值 |
 | --- | --- |
-| Implemented in | `backend/src/main/java/com/example/wms/controller` |
-| Endpoint count | 11 modules / 54 endpoints |
-| Frontend consumer | `frontend/src/api/index.js` |
-| Last verified | 2026-10-20 (cross-checked line by line against the source) |
+| 实现位置 | `backend/src/main/java/com/example/wms/controller` |
+| 接口数量 | 11 个模块 / 54 个接口 |
+| 前端调用方 | `frontend/src/api/index.js` |
+| 上次核对 | 2026-10-20（对照源码逐行核对） |
 
 ---
 
-## 1. Global conventions
+## 1. 全局约定
 
-- **baseURL**: `VITE_API_BASE_URL || '/api'`. All paths start with `/api`.
-- **Authentication**: after login the token is stored in `localStorage.wms_token` and sent as
-  `Authorization: Bearer <token>`. The server keeps a `token → session` table with an 8-hour TTL; an
-  invalid or expired token returns **401** and the frontend clears it and redirects to the login page.
-- **Authorization**: write endpoints validate against a role whitelist and return **403** on mismatch
-  (see the matrix in [`../README.md`](../README.md#authentication--authorization)).
-- **Response envelope**: `{ code, message, data, timestamp }`. `code === 0` means success; otherwise
-  `message` is safe to display to the end user as-is.
-- **Pagination request**: `{ pageNum, pageSize, ...filters }`, with `pageNum` defaulting to 1 and
-  `pageSize` to 10.
-- **Pagination response**: `{ records, total, pageNum, pageSize, pages }`.
-- **`_t` on GET requests**: the frontend appends `_t=<timestamp>` as a cache buster; the backend ignores it.
-- **Time format**: always the string `yyyy-MM-dd HH:mm:ss`, never an epoch timestamp.
-- **Field naming**: JSON is camelCase throughout (`JdbcMaps` converts `snake_case` columns automatically).
-- **Acting user**: on write endpoints the operator / picker / reviewer is **resolved from the token**;
-  passing the same-named request parameter has no effect.
+- **baseURL**：`VITE_API_BASE_URL || '/api'`。所有路径以 `/api` 开头。
+- **认证**：登录后令牌存在 `localStorage.wms_token`，请求头为 `Authorization: Bearer <token>`。服务端维护 `token → session` 表，有效期 8 小时；无效或过期返回 **401**，前端清掉令牌并回到登录页。
+- **授权**：写接口按角色白名单校验，不符返回 **403**（矩阵见 [`../README.md`](../README.md#认证与授权)）。
+- **响应信封**：`{ code, message, data, timestamp }`。`code === 0` 表示成功；否则 `message` 可以直接展示给用户。
+- **分页请求**：`{ pageNum, pageSize, ...filters }`，`pageNum` 默认 1，`pageSize` 默认 10。
+- **分页响应**：`{ records, total, pageNum, pageSize, pages }`。
+- **GET 上的 `_t`**：前端会追加 `_t=<时间戳>` 防止缓存；后端忽略它。
+- **时间格式**：始终是字符串 `yyyy-MM-dd HH:mm:ss`，不是纪元时间戳。
+- **字段命名**：JSON 全程驼峰（`JdbcMaps` 自动把 `snake_case` 列转过来）。
+- **操作人**：写接口上的操作员 / 拣货员 / 复核员**从令牌解析**；同名请求参数无效。
 
 ---
 
-## 2. Entity fields (per table)
+## 2. 实体字段（按表）
 
-JSON is emitted in camelCase (`JdbcMaps` converts `snake_case` column names), so the frontend receives the
-names listed below.
+JSON 以驼峰输出（`JdbcMaps` 转换 `snake_case` 列名），前端拿到的就是下面这些名字。
 
-- **Master data**
-  - `carrier`: carrierCode, carrierName, contactName, contactPhone, dailyPickupTime, status, createTime
-  - `employee`: employeeNo, employeeName, role, team, phone, status, createTime
-  - `sys_user`: username, password (BCrypt hash), employeeNo, role, nickname, createTime
-  - `sku`: skuCode, skuName, spec, unit, category, barcode, defaultLocationCode, weight, safetyStock, stockQty, status
-  - `location`: locationCode, zone, zoneName, aisle, rack, level, locationType (PICK/BULK), status, preferredCarrierCode, pathSeq
-- **Orders**
-  - `order`: orderNo, platform, carrierCode, carrierName, receiverName, receiverPhone, receiverAddress, province, city, priority, payTime, expectedDeliveryTime, status, waveNo, skuCount, totalQty, amount, buyerRemark, createTime
-  - `order_item`: orderNo, lineNo, skuCode, skuName, spec, unit, qty, pickedQty, locationCode, price, amount, remark
-- **Waves**
-  - `wave`: waveNo, waveName, strategy, status, orderCount, skuCount, totalQty, locationCount, provinceScope, creatorNo, creatorName, pickerNo, pickerName, reviewerNo, reviewerName, createTime, assignTime, pickStartTime, pickFinishTime, reviewFinishTime, handoverTime, pickDurationSec, totalDurationSec, hasShortage, remark
-  - `wave_order`: waveNo, orderNo, seqNo, held, holdReason
-- **Picking**
-  - `pick_task`: taskNo, waveNo, pickerNo, pickerName, status, itemCount, finishedCount, locationCount, shouldQty, actualQty, shortageQty, orderCount, startTime, finishTime, durationSec, pathText, remark, createTime
-  - `pick_item`: taskNo, waveNo, seqNo, locationCode, skuCode, skuName, spec, unit, shouldQty, actualQty, shortageQty, status, relatedOrderNos, scanTime, remark
-- **Exceptions and handover**
-  - `shortage`: shortageNo, waveNo, taskNo, orderNo, locationCode, skuCode, skuName, shouldQty, shortageQty, reason, reporterNo, reporterName, reportTime, status, handleType, handlerNo, handlerName, handleTime, handleRemark, substituteSkuCode, createTime
-  - `review`: reviewNo, waveNo, orderNo, reviewerNo, reviewerName, status, shouldSkuCount, shouldQty, actualQty, diffType, diffQty, diffDetail, packMaterial, packageCount, weight, startTime, finishTime, durationSec, remark, createTime
-  - `review_diff`: reviewNo, waveNo, orderNo, skuCode, skuName, diffType, shouldQty, actualQty, diffQty, responsibleStage, responsibleNo, remark, createTime
-  - `handover`: handoverNo, waveNos (comma-separated), carrierCode, carrierName, orderCount, packageCount, totalWeight, status, handoverUserNo, handoverUserName, receiveName, vehicleNo, createTime, handoverTime, remark
-- **Traceability**
-  - `operation_log`: bizType, bizNo, action, actionDesc, operatorNo, operatorName, operatorRole, detail, operateTime, createTime
+- **主数据**
+  - `carrier`：carrierCode、carrierName、contactName、contactPhone、dailyPickupTime、status、createTime
+  - `employee`：employeeNo、employeeName、role、team、phone、status、createTime
+  - `sys_user`：username、password（BCrypt 散列）、employeeNo、role、nickname、createTime
+  - `sku`：skuCode、skuName、spec、unit、category、barcode、defaultLocationCode、weight、safetyStock、stockQty、status
+  - `location`：locationCode、zone、zoneName、aisle、rack、level、locationType（PICK/BULK）、status、preferredCarrierCode、pathSeq
+- **订单**
+  - `order`：orderNo、platform、carrierCode、carrierName、receiverName、receiverPhone、receiverAddress、province、city、priority、payTime、expectedDeliveryTime、status、waveNo、skuCount、totalQty、amount、buyerRemark、createTime
+  - `order_item`：orderNo、lineNo、skuCode、skuName、spec、unit、qty、pickedQty、locationCode、price、amount、remark
+- **波次**
+  - `wave`：waveNo、waveName、strategy、status、orderCount、skuCount、totalQty、locationCount、provinceScope、creatorNo、creatorName、pickerNo、pickerName、reviewerNo、reviewerName、createTime、assignTime、pickStartTime、pickFinishTime、reviewFinishTime、handoverTime、pickDurationSec、totalDurationSec、hasShortage、remark
+  - `wave_order`：waveNo、orderNo、seqNo、held、holdReason
+- **拣货**
+  - `pick_task`：taskNo、waveNo、pickerNo、pickerName、status、itemCount、finishedCount、locationCount、shouldQty、actualQty、shortageQty、orderCount、startTime、finishTime、durationSec、pathText、remark、createTime
+  - `pick_item`：taskNo、waveNo、seqNo、locationCode、skuCode、skuName、spec、unit、shouldQty、actualQty、shortageQty、status、relatedOrderNos、scanTime、remark
+- **异常与交接**
+  - `shortage`：shortageNo、waveNo、taskNo、orderNo、locationCode、skuCode、skuName、shouldQty、shortageQty、reason、reporterNo、reporterName、reportTime、status、handleType、handlerNo、handlerName、handleTime、handleRemark、substituteSkuCode、createTime
+  - `review`：reviewNo、waveNo、orderNo、reviewerNo、reviewerName、status、shouldSkuCount、shouldQty、actualQty、diffType、diffQty、diffDetail、packMaterial、packageCount、weight、startTime、finishTime、durationSec、remark、createTime
+  - `review_diff`：reviewNo、waveNo、orderNo、skuCode、skuName、diffType、shouldQty、actualQty、diffQty、responsibleStage、responsibleNo、remark、createTime
+  - `handover`：handoverNo、waveNos（逗号分隔）、carrierCode、carrierName、orderCount、packageCount、totalWeight、status、handoverUserNo、handoverUserName、receiveName、vehicleNo、createTime、handoverTime、remark
+- **追溯**
+  - `operation_log`：bizType、bizNo、action、actionDesc、operatorNo、operatorName、operatorRole、detail、operateTime、createTime
 
 ---
 
-## 3. Enum dictionaries (`GET /api/base/enums`)
+## 3. 枚举字典（`GET /api/base/enums`）
 
-The backend `Dict` class is the single source of truth; the frontend no longer hard-codes any label. The
-response looks like `{ "orderStatus": [{ "code": "CREATED", "desc": "Created" }, …] }`.
+后端 `Dict` 是唯一来源；前端不再写死文案。响应形如 `{ "orderStatus": [{ "code": "CREATED", "desc": "已创建" }, …] }`。
 
-> Values are language-neutral codes. Descriptions are returned by the server so that a single deployment
-> serves one language; the English labels below document the intended meaning of each code.
+> 取值是与语言无关的代码。说明由服务端返回，一套部署对应一种语言。下表只列出代码。
 
-| Dictionary key | Values (partial) |
+| 字典键 | 取值（节选） |
 | --- | --- |
 | `orderStatus` | CREATED / POOLED / WAVED / PICKED / REVIEWED / OUTBOUND / CANCELLED |
 | `waveStatus` | CREATED / ASSIGNED / PICKING / PICKED / REVIEWING / REVIEWED / HANDOVERED / CLOSED / CANCELLED |
@@ -89,141 +78,140 @@ response looks like `{ "orderStatus": [{ "code": "CREATED", "desc": "Created" },
 
 ---
 
-## 4. Endpoint inventory (11 modules / 54 endpoints)
+## 4. 接口清单（11 个模块 / 54 个接口）
 
-| Module | Prefix | Count | Main endpoints |
+| 模块 | 前缀 | 数量 | 主要接口 |
 | --- | --- | --- | --- |
-| Auth | `/api/auth` | 1 | login |
-| Dashboard | `/api/dashboard` | 2 | summary (incl. overview/pipeline/todos), trend |
-| Orders | `/api/order` | 6 | page, detail, count-by-status, pool, pool-all, cancel |
-| Waves | `/api/wave` | 8 | page, detail, preview, generate, assign, close, cancel, picker-workload |
-| Picking | `/api/pick` | 7 | page, detail, my-tasks, start, confirm-item, report-shortage, finish |
-| Shortage | `/api/shortage` | 5 | page, handle, close, pending-count, reason-distribution |
-| Review | `/api/review` | 5 | page, detail, pending-waves, claim, submit |
-| Handover | `/api/handover` | 4 | page, reviewable-waves, create, confirm |
-| Analytics | `/api/analytics` | 5 | overview, trend, employee-efficiency, error-rate, shortage-distribution |
-| Master data | `/api/base` | 9 | enums, sku/page, sku/categories, location/page, location/zones, employee/page, employee/by-role, employee/teams, carrier/list |
-| Traceability | `/api/log` | 2 | page, trace |
+| 认证 | `/api/auth` | 1 | login |
+| 看板 | `/api/dashboard` | 2 | summary（含 overview/pipeline/todos）、trend |
+| 订单 | `/api/order` | 6 | page、detail、count-by-status、pool、pool-all、cancel |
+| 波次 | `/api/wave` | 8 | page、detail、preview、generate、assign、close、cancel、picker-workload |
+| 拣货 | `/api/pick` | 7 | page、detail、my-tasks、start、confirm-item、report-shortage、finish |
+| 缺货 | `/api/shortage` | 5 | page、handle、close、pending-count、reason-distribution |
+| 复核 | `/api/review` | 5 | page、detail、pending-waves、claim、submit |
+| 交接 | `/api/handover` | 4 | page、reviewable-waves、create、confirm |
+| 分析 | `/api/analytics` | 5 | overview、trend、employee-efficiency、error-rate、shortage-distribution |
+| 主数据 | `/api/base` | 9 | enums、sku/page、sku/categories、location/page、location/zones、employee/page、employee/by-role、employee/teams、carrier/list |
+| 追溯 | `/api/log` | 2 | page、trace |
 
-Role restrictions for write operations follow the permission matrix in
-[`../README.md`](../README.md#authentication--authorization); the notes below describe business rules only.
+写操作的角色限制见 [`../README.md`](../README.md#认证与授权) 的权限矩阵；下面只写业务规则。
 
-### 4.1 Auth
+### 4.1 认证
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| POST | `/api/auth/login` | `{ username, password }` | Returns `{ token, employeeNo, employeeName, role, team }`. Password checked via BCrypt; unknown account and wrong password return the same message |
+| POST | `/api/auth/login` | `{ username, password }` | 返回 `{ token, employeeNo, employeeName, role, team }`。口令用 BCrypt 校验；账号不存在和口令错误返回同一句话 |
 
-### 4.2 Dashboard
+### 4.2 看板
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/dashboard/summary` | `days?` | `{ overview, pipeline[], todos[] }`; `days` defaults to 7, shapes in [5.1](#51-overview) |
-| GET | `/api/dashboard/trend` | `days?` | Array of trend buckets; with `days=1` returns 24 hourly points, shapes in [5.2](#52-trend-bucket) |
+| GET | `/api/dashboard/summary` | `days?` | `{ overview, pipeline[], todos[] }`；`days` 默认 7，形状见 [5.1](#51-overview) |
+| GET | `/api/dashboard/trend` | `days?` | 趋势桶数组；`days=1` 时返回 24 个小时点，形状见 [5.2](#52-趋势桶) |
 
-### 4.3 Orders
+### 4.3 订单
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/order/page` | `orderNo?, platform?, carrierCode?, status?, province?, priority?, waveNo?, startDate?, endDate?, pageNum, pageSize` | Paginated, ordered by `createTime desc` |
-| GET | `/api/order/{orderNo}` | path parameter | Order detail including `items[]` |
+| GET | `/api/order/page` | `orderNo?、platform?、carrierCode?、status?、province?、priority?、waveNo?、startDate?、endDate?、pageNum、pageSize` | 分页，按 `createTime desc` |
+| GET | `/api/order/{orderNo}` | 路径参数 | 订单详情，含 `items[]` |
 | GET | `/api/order/count-by-status` | — | `[{ status, statusDesc, count }]` |
-| POST | `/api/order/pool` | `{ orderNos: [] }` | Pool the given orders, returns the affected row count |
-| POST | `/api/order/pool-all` | — | Move every `CREATED` order to `POOLED` |
-| POST | `/api/order/{orderNo}/cancel` | path parameter | Only `CREATED` / `POOLED` may be cancelled |
+| POST | `/api/order/pool` | `{ orderNos: [] }` | 汇入指定订单，返回影响行数 |
+| POST | `/api/order/pool-all` | — | 把全部 `CREATED` 订单改为 `POOLED` |
+| POST | `/api/order/{orderNo}/cancel` | 路径参数 | 只有 `CREATED` / `POOLED` 可以取消 |
 
-### 4.4 Waves
+### 4.4 波次
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/wave/page` | `waveNo?, status?, strategy?, pickerNo?, onlyWorking?, onlyShortage?, pageNum, pageSize` | Paginated |
-| GET | `/api/wave/{waveNo}` | path parameter | Detail including `orders[]` |
-| GET | `/api/wave/picker-workload` | — | In-flight task count and load per picker, used when assigning |
-| POST | `/api/wave/preview` | `{ strategy, orderNos?, ... }` | **Dry run** — computes the grouping without persisting |
-| POST | `/api/wave/generate` | `{ strategy, autoAssign?, namePrefix?, orderNos? }` | Creates wave + wave_order + pick_task + pick_item as one unit |
-| POST | `/api/wave/assign` | `{ waveNo, pickerNo }` | Only `CREATED` / `ASSIGNED` may be reassigned; target must be a PICKER |
-| POST | `/api/wave/{waveNo}/close` | path parameter | Only `HANDOVERED` may be archived as `CLOSED` |
-| POST | `/api/wave/{waveNo}/cancel` | path parameter | Only `CREATED` / `ASSIGNED`; orders return to the pool, tasks and items are deleted |
+| GET | `/api/wave/page` | `waveNo?、status?、strategy?、pickerNo?、onlyWorking?、onlyShortage?、pageNum、pageSize` | 分页 |
+| GET | `/api/wave/{waveNo}` | 路径参数 | 详情，含 `orders[]` |
+| GET | `/api/wave/picker-workload` | — | 每位拣货员在途任务数和负载，指派时用 |
+| POST | `/api/wave/preview` | `{ strategy, orderNos?, ... }` | **试算**，只算分组，不落库 |
+| POST | `/api/wave/generate` | `{ strategy, autoAssign?, namePrefix?, orderNos? }` | 一次创建 wave + wave_order + pick_task + pick_item |
+| POST | `/api/wave/assign` | `{ waveNo, pickerNo }` | 只有 `CREATED` / `ASSIGNED` 可以改派；目标必须是 PICKER |
+| POST | `/api/wave/{waveNo}/close` | 路径参数 | 只有 `HANDOVERED` 可以归档为 `CLOSED` |
+| POST | `/api/wave/{waveNo}/cancel` | 路径参数 | 只有 `CREATED` / `ASSIGNED`；订单回到池中，任务和明细删除 |
 
-### 4.5 Picking
+### 4.5 拣货
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/pick/page` | `taskNo?, waveNo?, pickerNo?, status?, pageNum, pageSize` | A picker always sees only their own tasks |
-| GET | `/api/pick/{taskNo}` | path parameter | Detail including `items[]`; someone else's task returns 403 |
-| GET | `/api/pick/my-tasks` | `pickerNo?` | Same as above; any supplied `pickerNo` is ignored |
-| POST | `/api/pick/{taskNo}/start` | path parameter | `WAITING → PICKING`; picker resolved from the login context |
-| POST | `/api/pick/confirm-item` | `{ itemId, actualQty }` | Actual ≤ should; task progress is recalculated |
-| POST | `/api/pick/report-shortage` | `{ itemId, shortageQty, reason, remark? }` | `1 ≤ shortage ≤ outstanding`; task becomes `EXCEPTION` and a shortage record is created |
-| POST | `/api/pick/{taskNo}/finish` | path parameter | `PICKING` / `EXCEPTION → FINISHED`; propagates to wave and orders |
+| GET | `/api/pick/page` | `taskNo?、waveNo?、pickerNo?、status?、pageNum、pageSize` | 拣货员永远只能看到自己的任务 |
+| GET | `/api/pick/{taskNo}` | 路径参数 | 详情含 `items[]`；别人的任务返回 403 |
+| GET | `/api/pick/my-tasks` | `pickerNo?` | 同上；传入的 `pickerNo` 被忽略 |
+| POST | `/api/pick/{taskNo}/start` | 路径参数 | `WAITING → PICKING`；拣货员从登录上下文取 |
+| POST | `/api/pick/confirm-item` | `{ itemId, actualQty }` | 实拣 ≤ 应拣；重算任务进度 |
+| POST | `/api/pick/report-shortage` | `{ itemId, shortageQty, reason, remark? }` | `1 ≤ 缺货 ≤ 未完成数量`；任务变为 `EXCEPTION` 并生成缺货单 |
+| POST | `/api/pick/{taskNo}/finish` | 路径参数 | `PICKING` / `EXCEPTION → FINISHED`；同步波次和订单 |
 
-### 4.6 Shortage
+### 4.6 缺货
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/shortage/page` | `shortageNo?, waveNo?, skuCode?, status?, reason?, pageNum, pageSize` | Paginated |
-| GET | `/api/shortage/pending-count` | — | Pending count, used for the sidebar badge |
+| GET | `/api/shortage/page` | `shortageNo?、waveNo?、skuCode?、status?、reason?、pageNum、pageSize` | 分页 |
+| GET | `/api/shortage/pending-count` | — | 待处理数量，侧栏角标用 |
 | GET | `/api/shortage/reason-distribution` | — | `[{ reason, reasonDesc, count }]` |
 | POST | `/api/shortage/handle` | `{ id, handleType, handleRemark?, substituteSkuCode? }` | `PENDING → HANDLED` |
-| POST | `/api/shortage/{id}/close` | path parameter | `→ CLOSED` |
+| POST | `/api/shortage/{id}/close` | 路径参数 | `→ CLOSED` |
 
-### 4.7 Review
+### 4.7 复核
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/review/page` | `reviewNo?, waveNo?, orderNo?, status?, diffType?, reviewerNo?, pageNum, pageSize` | Paginated, includes `shouldItems[]` and `diffItems[]` |
-| GET | `/api/review/{reviewNo}` | path parameter | Detail |
-| GET | `/api/review/pending-waves` | — | Waves in `PICKED` / `REVIEWING` |
-| POST | `/api/review/claim` | `waveNo` (query) | Claim a wave; creates one `WAITING` review per order; reviewer taken from the session |
-| POST | `/api/review/submit` | `{ reviewNo, actualQty?, diffItems[], packMaterial?, packageCount?, weight?, remark? }` | Only `WAITING` may be submitted; no diff → `PASS`, otherwise `DIFF` |
+| GET | `/api/review/page` | `reviewNo?、waveNo?、orderNo?、status?、diffType?、reviewerNo?、pageNum、pageSize` | 分页，含 `shouldItems[]` 和 `diffItems[]` |
+| GET | `/api/review/{reviewNo}` | 路径参数 | 详情 |
+| GET | `/api/review/pending-waves` | — | 状态为 `PICKED` / `REVIEWING` 的波次 |
+| POST | `/api/review/claim` | `waveNo`（查询参数） | 领取波次；每个订单建一张 `WAITING` 复核单；复核员取自会话 |
+| POST | `/api/review/submit` | `{ reviewNo, actualQty?, diffItems[], packMaterial?, packageCount?, weight?, remark? }` | 只有 `WAITING` 可以提交；无差异为 `PASS`，否则 `DIFF` |
 
-### 4.8 Handover
+### 4.8 交接
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/handover/page` | `handoverNo?, carrierCode?, status?, pageNum, pageSize` | Paginated |
-| GET | `/api/handover/reviewable-waves` | `carrierCode?` | Waves eligible for handover (`REVIEWED`) |
-| POST | `/api/handover/create` | `{ carrierCode, waveNos: [], vehicleNo?, remark? }` | Waves must be `REVIEWED`; handover user taken from the session |
-| POST | `/api/handover/confirm` | `{ handoverNo, receiveName?, actualPackageCount?, rejected?, remark? }` | Only `CREATED` may be confirmed; confirmation moves waves and orders to outbound |
+| GET | `/api/handover/page` | `handoverNo?、carrierCode?、status?、pageNum、pageSize` | 分页 |
+| GET | `/api/handover/reviewable-waves` | `carrierCode?` | 可以交接的波次（`REVIEWED`） |
+| POST | `/api/handover/create` | `{ carrierCode, waveNos: [], vehicleNo?, remark? }` | 波次必须是 `REVIEWED`；交接人取自会话 |
+| POST | `/api/handover/confirm` | `{ handoverNo, receiveName?, actualPackageCount?, rejected?, remark? }` | 只有 `CREATED` 可以确认；确认后波次和订单进入出库 |
 
-### 4.9 Analytics
+### 4.9 分析
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/analytics/overview` | `startDate?, endDate?` | Same shape as `overview` |
-| GET | `/api/analytics/employee-efficiency` | `startDate?, endDate?, employeeNo?` | Per-employee order count, item count and efficiency |
-| GET | `/api/analytics/error-rate` | `startDate?, endDate?` | Daily error rate |
-| GET | `/api/analytics/trend` | `startDate?, endDate?` | Same shape as `trend` |
-| GET | `/api/analytics/shortage-distribution` | `startDate?, endDate?` | Shortage reason distribution |
+| GET | `/api/analytics/overview` | `startDate?、endDate?` | 形状同 `overview` |
+| GET | `/api/analytics/employee-efficiency` | `startDate?、endDate?、employeeNo?` | 按员工的单量、件数和效率 |
+| GET | `/api/analytics/error-rate` | `startDate?、endDate?` | 每日差错率 |
+| GET | `/api/analytics/trend` | `startDate?、endDate?` | 形状同 `trend` |
+| GET | `/api/analytics/shortage-distribution` | `startDate?、endDate?` | 缺货原因分布 |
 
-### 4.10 Master data
+### 4.10 主数据
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/base/enums` | — | All enum dictionaries, see [section 3](#3-enum-dictionaries-get-apibaseenums) |
-| GET | `/api/base/sku/page` | `keyword?, category?, pageNum, pageSize` | Paginated SKUs |
-| GET | `/api/base/sku/categories` | — | Distinct SKU categories |
-| GET | `/api/base/location/page` | `zone?, pageNum, pageSize` | Paginated locations |
-| GET | `/api/base/location/zones` | — | Zone summary (code / name / location count) |
-| GET | `/api/base/employee/page` | `role?, team?, pageNum, pageSize` | Paginated employees (contains phone numbers, ADMIN only) |
-| GET | `/api/base/employee/by-role` | `role?` | Employees by role, used when assigning pickers |
-| GET | `/api/base/employee/teams` | — | Distinct teams (ADMIN only) |
-| GET | `/api/base/carrier/list` | — | Carrier list |
+| GET | `/api/base/enums` | — | 全部枚举，见[第 3 节](#3-枚举字典get-apibaseenums) |
+| GET | `/api/base/sku/page` | `keyword?、category?、pageNum、pageSize` | SKU 分页 |
+| GET | `/api/base/sku/categories` | — | SKU 品类去重 |
+| GET | `/api/base/location/page` | `zone?、pageNum、pageSize` | 库位分页 |
+| GET | `/api/base/location/zones` | — | 库区汇总（代码 / 名称 / 库位数） |
+| GET | `/api/base/employee/page` | `role?、team?、pageNum、pageSize` | 员工分页（含电话，仅 ADMIN） |
+| GET | `/api/base/employee/by-role` | `role?` | 按角色查员工，指派拣货员时用 |
+| GET | `/api/base/employee/teams` | — | 班组去重（仅 ADMIN） |
+| GET | `/api/base/carrier/list` | — | 承运商列表 |
 
-### 4.11 Traceability
+### 4.11 追溯
 
-| Method | Path | Parameters | Notes |
+| 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/log/trace` | `bizNo` (query) | Full operation timeline for one document |
-| GET | `/api/log/page` | `bizType?, bizNo?, operatorNo?, pageNum, pageSize` | All audit records, ADMIN only |
+| GET | `/api/log/trace` | `bizNo`（查询参数） | 一张单据的完整操作时间线 |
+| GET | `/api/log/page` | `bizType?、bizNo?、operatorNo?、pageNum、pageSize` | 全部审计记录，仅 ADMIN |
 
 ---
 
-## 5. Aggregate shapes
+## 5. 聚合形状
 
 ### 5.1 overview
 
-Shared by `dashboard/summary` and `analytics/overview`.
+`dashboard/summary` 和 `analytics/overview` 共用。
 
 ```json
 {
@@ -233,103 +221,93 @@ Shared by `dashboard/summary` and `analytics/overview`.
   "pickEfficiency": 186.5, "avgPickDurationSec": 1520,
   "errorRate": 0.0031, "shortageRate": 0.012, "reviewPassRate": 0.96,
   "pendingShortageCount": 2,
-  "alerts": [{ "metric": "pickEfficiency", "metricName": "Pick efficiency",
+  "alerts": [{ "metric": "pickEfficiency", "metricName": "拣货效率",
                "currentValue": 98, "threshold": 120, "level": "WARN",
-               "message": "Pick efficiency below 120 items/hour" }]
+               "message": "拣货效率低于 120 件/小时" }]
 }
 ```
 
-Alert thresholds (defined once in `Stats`):
+告警阈值（只在 `Stats` 里定义一次）：
 
-| Metric | Threshold | Level |
+| 指标 | 阈值 | 等级 |
 | --- | --- | --- |
-| `pickEfficiency` | < 120 items/hour | WARN |
+| `pickEfficiency` | < 120 件/小时 | WARN |
 | `errorRate` | > 0.005 | DANGER |
 | `shortageRate` | > 0.02 | DANGER |
-| `avgPickDurationSec` | > 3600 s | WARN |
+| `avgPickDurationSec` | > 3600 秒 | WARN |
 
-### 5.2 trend bucket
+### 5.2 趋势桶
 
-Multi-day ranges emit one point per day, with `label` as `YYYY-MM-DD`:
+多日区间每天一个点，`label` 为 `YYYY-MM-DD`：
 
 ```json
 [{ "label": "2026-10-20", "waveCount": 3, "orderCount": 18, "pickedQty": 210,
    "shortageQty": 2, "errorRate": 0.0021, "avgDurationSec": 1380, "pickEfficiency": 198.4 }]
 ```
 
-When the range is a single day (the dashboard's "today" view) the API emits **24 hourly points** with
-`label` as `YYYY-MM-DD HH:00`; the frontend switches the X-axis format based on label length
-(`2026-10-20 09:00` → `09:00`). A single daily point would render as one bar and hide the intraday rhythm.
+区间只有一天（看板的「今天」）时，接口返回 **24 个小时点**，`label` 为 `YYYY-MM-DD HH:00`。前端按 label 长度切换 X 轴格式（`2026-10-20 09:00` → `09:00`）。如果只给一个日点，图上就是一根柱子，看不出日内节奏。
 
-Aggregation basis:
+聚合口径：
 
-| Field | Bucketed by |
+| 字段 | 按什么分桶 |
 | --- | --- |
-| `waveCount`, `orderCount` | Wave **creation** time |
-| `pickedQty`, `pickEfficiency`, `shortageQty` | Pick task **finish** time, computed from `actual_qty` / `duration_sec` |
-| `errorRate` | Review **finish** time, share of `DIFF` |
-| `avgDurationSec` | Mean pick duration of waves in that bucket |
+| `waveCount`、`orderCount` | 波次**创建**时间 |
+| `pickedQty`、`pickEfficiency`、`shortageQty` | 拣货任务**完成**时间，由 `actual_qty` / `duration_sec` 计算 |
+| `errorRate` | 复核**完成**时间，`DIFF` 占比 |
+| `avgDurationSec` | 该桶内波次拣货时长的均值 |
 
-`pickEfficiency` returns `null` (not 0) when no duration was recorded in the bucket — "no data" and "zero
-efficiency" are different things. The frontend uses `connectNulls` so known points are joined instead of
-drawing a fake dip.
+桶内没有记录时长时，`pickEfficiency` 返回 `null`（不是 0）——「没有数据」和「效率为零」不是一回事。前端用 `connectNulls`，把已知点连起来，而不是画一段假的下跌。
 
 ---
 
-## 6. State machines and trigger chains
+## 6. 状态机与触发链
 
-**Transitions (validated server-side; terminal states are final and steps cannot be skipped)**
+**迁移（服务端校验；终态不可再写，也不能跳步）**
 
-| Document | Transition | Constraint |
+| 单据 | 迁移 | 约束 |
 | --- | --- | --- |
-| `order` | CREATED → POOLED → WAVED → PICKED → REVIEWED → OUTBOUND, may be CANCELLED | Only CREATED/POOLED may be cancelled |
-| `wave` | CREATED → ASSIGNED → PICKING → PICKED → REVIEWING → REVIEWED → HANDOVERED → CLOSED, may be CANCELLED | Only CREATED/ASSIGNED may be reassigned or cancelled; only HANDOVERED may be archived |
-| `pick_task` | WAITING → PICKING → FINISHED (EXCEPTION when a shortage exists) | `start` only from WAITING; `finish` only from PICKING/EXCEPTION |
-| `review` | WAITING → PASS / DIFF | Submission requires WAITING; a second submission is a business failure |
-| `handover` | CREATED → CONFIRMED / REJECTED | Confirmation requires CREATED |
+| `order` | CREATED → POOLED → WAVED → PICKED → REVIEWED → OUTBOUND，可 CANCELLED | 只有 CREATED/POOLED 可以取消 |
+| `wave` | CREATED → ASSIGNED → PICKING → PICKED → REVIEWING → REVIEWED → HANDOVERED → CLOSED，可 CANCELLED | 只有 CREATED/ASSIGNED 可以改派或取消；只有 HANDOVERED 可以归档 |
+| `pick_task` | WAITING → PICKING → FINISHED（有缺货时为 EXCEPTION） | `start` 只能从 WAITING；`finish` 只能从 PICKING/EXCEPTION |
+| `review` | WAITING → PASS / DIFF | 提交要求 WAITING；第二次提交是业务失败 |
+| `handover` | CREATED → CONFIRMED / REJECTED | 确认要求 CREATED |
 | `shortage` | PENDING → HANDLED → CLOSED | — |
 
-**Trigger chains (which tables one operation also touches)**
+**触发链（一次操作还会改哪些表）**
 
 ```text
-wave/generate    → INSERT wave + wave_order + pick_task + pick_item; order.status = WAVED
-pick/start       → pick_task.status = PICKING; wave.status = PICKING
-pick/finish      → pick_task.status = FINISHED/EXCEPTION; wave.status = PICKED; order.status = PICKED
-review/submit    → review.status = PASS/DIFF; once every review of the wave is settled → wave.status = REVIEWED, order.status = REVIEWED
-handover/confirm → handover.status = CONFIRMED; wave.status = HANDOVERED; order.status = OUTBOUND
-shortage/handle  → shortage.status = HANDLED; wave.has_shortage = 1
+wave/generate    → INSERT wave + wave_order + pick_task + pick_item；order.status = WAVED
+pick/start       → pick_task.status = PICKING；wave.status = PICKING
+pick/finish      → pick_task.status = FINISHED/EXCEPTION；wave.status = PICKED；order.status = PICKED
+review/submit    → review.status = PASS/DIFF；该波次全部复核落定后 → wave.status = REVIEWED，order.status = REVIEWED
+handover/confirm → handover.status = CONFIRMED；wave.status = HANDOVERED；order.status = OUTBOUND
+shortage/handle  → shortage.status = HANDLED；wave.has_shortage = 1
 ```
 
-**Pick item merge rules**
+**拣货明细合并规则**
 
-- Lines are merged per `locationCode + skuCode` within a wave; `shouldQty` is summed and the contributing
-  order numbers are recorded in `relatedOrderNos`.
-- Items are ordered by `location.pathSeq` to produce the pick path, stored as `pick_item.seq_no`; a
-  human-readable route is written to `pick_task.pathText`.
-- After merging, the number of `pick_item` rows is on the order of the wave's `locationCount`, not the
-  number of order lines.
+- 同一波次内按 `locationCode + skuCode` 合并；`shouldQty` 相加，来源订单号记在 `relatedOrderNos`。
+- 按 `location.pathSeq` 排序得到拣货路径，写入 `pick_item.seq_no`；可读路线写入 `pick_task.pathText`。
+- 合并之后，`pick_item` 行数大约等于波次的 `locationCount`，而不是订单行数。
 
 ---
 
-## 7. Maintenance
+## 7. 维护
 
-This document must stay consistent with `controller/*.java`. When the API changes, walk this checklist:
+本文必须和 `controller/*.java` 一致。接口变更时走这张清单：
 
-| Change | Where to update |
+| 变更 | 改哪里 |
 | --- | --- |
-| Add or remove an endpoint | The module table in section 4 **and** the count in the overview table |
-| Change parameters | The "Parameters" column of that row |
-| Change a response shape | Section 5 |
-| Change a state transition | Section 6 |
-| Add an enum value | Section 3 |
+| 增加或删除接口 | 第 4 节的模块表**以及**文首数量 |
+| 改参数 | 该行的「参数」列 |
+| 改响应形状 | 第 5 节 |
+| 改状态迁移 | 第 6 节 |
+| 增加枚举值 | 第 3 节 |
 
-Verification needs no extra tooling — count the annotations in the controllers and compare with the number
-of table rows:
+核对不需要额外工具——数控制器上的注解，再和第 4 节表格行数比较：
 
 ```bash
 grep -c "@GetMapping\|@PostMapping" backend/src/main/java/com/example/wms/controller/*.java
 ```
 
-The total must equal the number of data rows across all tables in section 4. Spot-check a few paths
-character by character. A mismatch means an endpoint was changed without a doc update — the code wins, so
-fix the document.
+合计必须等于第 4 节所有表的数据行数。抽几条路径逐字核对。对不上就说明改了接口却没改文档——以代码为准，把文档补上。

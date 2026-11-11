@@ -23,7 +23,7 @@
           <li><el-icon><DocumentChecked /></el-icon> 复核打包 · 差异记录与出库交接</li>
         </ul>
 
-        <div class="brand-foot">WMS v4 · Spring Boot + Vue3</div>
+        <div class="brand-foot">WMS v5.0 · Spring Boot + Vue3</div>
       </div>
     </section>
 

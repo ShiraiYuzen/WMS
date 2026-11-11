@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-WMS v4 演示数据一键生成器。
+WMS v5 演示数据一键生成器。
 
 作用：把演示数据从「库内最后一张订单」续写到现在，随时运行都能得到一份
 「业务时间 = 当前时间」且内部完全自洽的数据。
@@ -86,7 +86,7 @@ def load_config():
     """优先读 application.properties，环境变量可覆盖，保证与后端用的是同一个库。"""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     props = os.path.join(root, "backend", "src", "main", "resources", "application.properties")
-    cfg = {"host": "127.0.0.1", "port": "3306", "name": "wms_v4", "user": "root", "pass": ""}
+    cfg = {"host": "127.0.0.1", "port": "3306", "name": "wms_v5", "user": "root", "pass": ""}
 
     if os.path.exists(props):
         with open(props, encoding="utf-8") as f:
