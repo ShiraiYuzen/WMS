@@ -138,7 +138,7 @@
 │       │   ├── controller/     # 11 个薄控制器，54 个接口
 │       │   └── dto/            # ApiResult、PageResult、LoginRequest/Response
 │       └── resources/
-│           ├── application.properties
+│           ├── application.yml
 │           ├── schema.sql      # 建表，可重复执行
 │           └── seed.sql        # 演示数据快照（只在空库时加载）
 ├── frontend/                   # Vue 3 单页应用
@@ -211,7 +211,7 @@ schema.sql executed (idempotent DDL)
 empty database detected — seed.sql executed (demo data loaded)
 ```
 
-> 请显式传入 `--server.port=8080`。如果 shell 里有 `SERVER__PORT`，它的优先级高于 `application.properties`，Spring 会绑到一个随机端口。
+> 请显式传入 `--server.port=8080`。如果 shell 里有 `SERVER__PORT`，它的优先级高于 `application.yml`，Spring 会绑到一个随机端口。
 
 ### 3. 前端
 
@@ -246,7 +246,7 @@ npm run build      # 输出在 dist/
 
 ## 配置
 
-`backend/src/main/resources/application.properties` 里和部署有关的值都从环境变量读取，并带本地开发默认值：
+`backend/src/main/resources/application.yml` 里和部署有关的值都从环境变量读取，并带本地开发默认值：
 
 | 配置项 | 环境变量 | 默认值 |
 | --- | --- | --- |

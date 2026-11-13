@@ -22,7 +22,7 @@ WMS v5 演示数据一键生成器。
   ./tools/gen-demo.sh --no-verify     # 跳过校验（不推荐）
 
 也可以直接调 python：python3 tools/gen-demo-data.py --days 3
-数据库连接从 backend/src/main/resources/application.properties 读取，
+数据库连接从 backend/src/main/resources/application.yml 读取，
 可用环境变量覆盖：WMS_DB_HOST / WMS_DB_PORT / WMS_DB_NAME / WMS_DB_USER / WMS_DB_PASS。
 """
 
@@ -82,36 +82,48 @@ def resolve_placeholder(value):
     return os.environ.get(m.group(1), m.group(2) if m.group(2) is not None else "")
 
 
+def unquote(value):
+    value = value.strip().rstrip(",")
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        return value[1:-1]
+    return value
+
+
+def apply_datasource_text(text, cfg):
+    """从 properties 或 yaml 文本里取出数据源三项。"""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("spring.datasource.url=") or line.startswith("url:"):
+            value = line.split("=", 1)[1] if line.startswith("spring.") else line.split(":", 1)[1]
+            m = re.search(r"//([^:/]+):(\d+)/([^?]+)", resolve_placeholder(unquote(value)))
+            if m:
+                cfg["host"], cfg["port"], cfg["name"] = m.group(1), m.group(2), m.group(3)
+        elif line.startswith("spring.datasource.username=") or line.startswith("username:"):
+            value = line.split("=", 1)[1] if line.startswith("spring.") else line.split(":", 1)[1]
+            cfg["user"] = resolve_placeholder(unquote(value))
+        elif line.startswith("spring.datasource.password=") or line.startswith("password:"):
+            value = line.split("=", 1)[1] if line.startswith("spring.") else line.split(":", 1)[1]
+            cfg["pass"] = resolve_placeholder(unquote(value))
+
+
 def load_config():
-    """优先读 application.properties，环境变量可覆盖，保证与后端用的是同一个库。"""
+    """优先读 application.yml，环境变量可覆盖，保证与后端用的是同一个库。"""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    props = os.path.join(root, "backend", "src", "main", "resources", "application.properties")
+    props = os.path.join(root, "backend", "src", "main", "resources", "application.yml")
     cfg = {"host": "127.0.0.1", "port": "3306", "name": "wms_v5", "user": "root", "pass": ""}
 
     if os.path.exists(props):
         with open(props, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("spring.datasource.url="):
-                    m = re.search(r"//([^:/]+):(\d+)/([^?]+)", resolve_placeholder(line.split("=", 1)[1]))
-                    if m:
-                        cfg["host"], cfg["port"], cfg["name"] = m.group(1), m.group(2), m.group(3)
-                elif line.startswith("spring.datasource.username="):
-                    cfg["user"] = resolve_placeholder(line.split("=", 1)[1])
-                elif line.startswith("spring.datasource.password="):
-                    cfg["pass"] = resolve_placeholder(line.split("=", 1)[1])
+            apply_datasource_text(f.read(), cfg)
 
         # 本地口令外置在 application-local.properties（已被 .gitignore 排除），
         # 与后端 spring.config.import 读的是同一份，避免两边连到不同的库。
         local_props = os.path.join(root, "backend", "application-local.properties")
         if os.path.exists(local_props):
             with open(local_props, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("spring.datasource.username="):
-                        cfg["user"] = resolve_placeholder(line.split("=", 1)[1])
-                    elif line.startswith("spring.datasource.password="):
-                        cfg["pass"] = resolve_placeholder(line.split("=", 1)[1])
+                apply_datasource_text(f.read(), cfg)
 
     cfg["host"] = os.environ.get("WMS_DB_HOST", cfg["host"])
     cfg["port"] = os.environ.get("WMS_DB_PORT", cfg["port"])

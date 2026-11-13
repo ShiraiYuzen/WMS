@@ -35,7 +35,7 @@
 | SEC-10 | 安全响应头全部缺失（CSP、X-Frame-Options 等） | 中 | 后端和前端都没设置 | ❌ 未修复 |
 | SEC-11 | 令牌不能吊销；没有登出接口；固定 8 小时有效 | 中 | `TokenService` | ❌ 未修复 |
 | SEC-12 | 令牌存在 localStorage——任何 XSS 都能把它带走 | 中 | `frontend/src/stores/app.js` | ❌ 未修复 |
-| SEC-13 | 数据库口令以明文提交进仓库 | 中 | `application.properties` | ⚠️ 部分处理 |
+| SEC-13 | 数据库口令以明文提交进仓库 | 中 | `application.yml` | ⚠️ 部分处理 |
 | SEC-14 | 缺货数量没有上限——可以超过待拣数量 | 中 | `PickController#reportShortage` | ✅ 已修复（顺带） |
 | SEC-15 | 不校验任务归属——可以读写别人的任务 | 中 | `PickController#myTasks/#start` | ✅ 已修复（顺带） |
 | SEC-16 | 收件人姓名 / 电话 / 地址 / 金额以明文返回给每个角色 | 中 | `OrderController#page` | ⚠️ 部分缓解 |
@@ -608,7 +608,7 @@ spring.datasource.password=123456
 - 生产用密钥管理（Vault / KMS / 云密钥库）。
 - 按最小权限拆数据库账号：应用账号只有 DML，没有 DDL。
 
-> 现状：配置已改为 `${WMS_DB_PASS:}`，仓库里不再提交口令，本地默认故意留空，而不是填演示口令。曾经提交过的口令仍在 Git 历史里，应当轮换。
+> 现状：配置已改为 `application.yml` 里的 `${WMS_DB_PASS:}`，仓库里不再提交口令，本地默认故意留空，而不是填演示口令。曾经提交过的口令仍在 Git 历史里，应当轮换。
 
 ---
 

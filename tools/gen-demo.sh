@@ -8,7 +8,7 @@
 #   ./tools/gen-demo.sh --no-verify     跳过内置校验（不推荐）
 #
 # 说明：无论从哪个目录调用，都会自动切到项目根目录，脚本内的相对路径
-# （application.properties、seed.sql 等）始终有效。
+# （application.yml、seed.sql 等）始终有效。
 
 set -euo pipefail
 

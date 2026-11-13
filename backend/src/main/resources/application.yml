@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: wms-v5
+
+  # Optional local overrides, git-ignored. Put machine-specific credentials in
+  # backend/application-local.properties and they are picked up automatically.
+  config:
+    import: "optional:file:./application-local.properties"
+
+  # ==================== Data source ====================
+  # Dedicated database for v5. Schema and seed data are created automatically on
+  # first startup (createDatabaseIfNotExist=true + DatabaseInitializer).
+  # Credentials are intentionally NOT stored here: provide them through the
+  # WMS_DB_USER / WMS_DB_PASS environment variables, an IDE run configuration,
+  # or a git-ignored application-local.properties.
+  datasource:
+    url: "${WMS_DB_URL:jdbc:mysql://127.0.0.1:3306/wms_v5?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}"
+    username: "${WMS_DB_USER:root}"
+    password: "${WMS_DB_PASS:}"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: WmsV5HikariPool
+
+# ==================== Server port ====================
+# 8080 pairs with the Vite dev proxy on 5173.
+# Note: an exported SERVER__PORT environment variable outranks this value,
+# so always pass --server.port=8080 explicitly when starting the jar.
+server:
+  port: "${SERVER_PORT:8080}"
+
+# ==================== MyBatis-Plus ====================
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+# ==================== Logging ====================
+# Raise com.example.wms to DEBUG when troubleshooting.
+logging:
+  level:
+    com.example.wms: INFO
