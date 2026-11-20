@@ -5,9 +5,9 @@
 | 项 | 值 |
 | --- | --- |
 | 实现位置 | `backend/src/main/java/com/example/wms/controller` |
-| 接口数量 | 11 个模块 / 54 个接口 |
+| 接口数量 | 11 个模块 / 55 个接口 |
 | 前端调用方 | `frontend/src/api/index.js` |
-| 上次核对 | 2026-10-20（对照源码逐行核对） |
+| 上次核对 | 2026-11-20（对照源码逐行核对） |
 
 ---
 
@@ -78,7 +78,7 @@ JSON 以驼峰输出（`JdbcMaps` 转换 `snake_case` 列名），前端拿到�
 
 ---
 
-## 4. 接口清单（11 个模块 / 54 个接口）
+## 4. 接口清单（11 个模块 / 55 个接口）
 
 | 模块 | 前缀 | 数量 | 主要接口 |
 | --- | --- | --- | --- |
@@ -91,7 +91,7 @@ JSON 以驼峰输出（`JdbcMaps` 转换 `snake_case` 列名），前端拿到�
 | 复核 | `/api/review` | 5 | page、detail、pending-waves、claim、submit |
 | 交接 | `/api/handover` | 4 | page、reviewable-waves、create、confirm |
 | 分析 | `/api/analytics` | 5 | overview、trend、employee-efficiency、error-rate、shortage-distribution |
-| 主数据 | `/api/base` | 9 | enums、sku/page、sku/categories、location/page、location/zones、employee/page、employee/by-role、employee/teams、carrier/list |
+| 主数据 | `/api/base` | 10 | enums、sku/page、sku/categories、location/page、location/zones、employee/page、employee/by-role、employee/teams、carrier/list、carrier/stats |
 | 追溯 | `/api/log` | 2 | page、trace |
 
 写操作的角色限制见 [`../README.md`](../README.md#认证与授权) 的权限矩阵；下面只写业务规则。
@@ -197,6 +197,7 @@ JSON 以驼峰输出（`JdbcMaps` 转换 `snake_case` 列名），前端拿到�
 | GET | `/api/base/employee/by-role` | `role?` | 按角色查员工，指派拣货员时用 |
 | GET | `/api/base/employee/teams` | — | 班组去重（仅 ADMIN） |
 | GET | `/api/base/carrier/list` | — | 承运商列表 |
+| GET | `/api/base/carrier/stats` | — | 每个承运商一行：`carrierCode`、`orderCount`、`waveCount`、`handoverCount`。全库汇总，不返回订单行 |
 
 ### 4.11 追溯
 

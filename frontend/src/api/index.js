@@ -108,7 +108,8 @@ export const baseApi = {
   employeePage: (params) => get('/base/employee/page', params),
   employeesByRole: (role) => get('/base/employee/by-role', { role }),
   teams: () => get('/base/employee/teams'),
-  carriers: () => get('/base/carrier/list')
+  carriers: () => get('/base/carrier/list'),
+  carrierStats: () => get('/base/carrier/stats')
 }
 
 /* ============================== 作业追溯 ============================== */

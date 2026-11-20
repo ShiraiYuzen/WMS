@@ -79,4 +79,9 @@ public class BaseDataController {
     public ApiResult<List<Map<String, Object>>> carrierList() {
         return ApiResult.ok(baseDataService.carrierList());
     }
+
+    @GetMapping("/carrier/stats")
+    public ApiResult<List<Map<String, Object>>> carrierStats() {
+        return ApiResult.ok(baseDataService.carrierStats());
+    }
 }

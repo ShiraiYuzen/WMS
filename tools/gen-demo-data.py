@@ -33,6 +33,7 @@ import getpass
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -68,12 +69,33 @@ PLATE_PREFIX = ["粤B", "粤A", "浙A", "苏E", "沪A", "京A"]
 
 def mysql_bin():
     env = os.environ.get("MYSQL_BIN")
-    if env:
+    if env and os.path.exists(env):
         return env
-    for p in ("/usr/local/mysql/bin/mysql", "/opt/homebrew/bin/mysql", "/usr/bin/mysql"):
-        if os.path.exists(p):
-            return p
-    return "mysql"
+    found = shutil.which("mysql")
+    if found:
+        return found
+    candidates = [
+        "/usr/local/mysql/bin/mysql",
+        "/opt/homebrew/bin/mysql",
+        "/usr/bin/mysql",
+        r"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
+        r"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe",
+        r"C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe",
+        r"C:\xampp\mysql\bin\mysql.exe",
+    ]
+    pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+    mysql_root = os.path.join(pf, "MySQL")
+    if os.path.isdir(mysql_root):
+        try:
+            for name in sorted(os.listdir(mysql_root), reverse=True):
+                if name.startswith("MySQL Server"):
+                    candidates.append(os.path.join(mysql_root, name, "bin", "mysql.exe"))
+        except OSError:
+            pass
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return "mysql.exe" if os.name == "nt" else "mysql"
 
 
 def resolve_placeholder(value):
@@ -153,10 +175,13 @@ class Db:
                 "--default-character-set=utf8mb4", "-D", self.cfg["name"]]
 
     def query(self, sql):
-        p = subprocess.run(self._args() + ["-N", "-B", "-e", sql], capture_output=True, text=True, env=self.env)
+        p = subprocess.run(
+            self._args() + ["-N", "-B", "-e", sql],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", env=self.env,
+        )
         if p.returncode != 0:
-            raise RuntimeError(p.stderr.strip())
-        return [ln.split("\t") for ln in p.stdout.strip().split("\n") if ln]
+            raise RuntimeError((p.stderr or "").strip() or "mysql 执行失败")
+        return [ln.split("\t") for ln in (p.stdout or "").strip().split("\n") if ln]
 
     def scalar(self, sql, default=0):
         rows = self.query(sql)
@@ -165,7 +190,10 @@ class Db:
 
     def run_script(self, path):
         with open(path, "rb") as f:
-            p = subprocess.run(self._args(), stdin=f, capture_output=True, text=True, env=self.env)
+            p = subprocess.run(
+                self._args(), stdin=f, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", env=self.env,
+            )
         return p
 
 

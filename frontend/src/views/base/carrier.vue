@@ -78,11 +78,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { baseApi, orderApi, handoverApi } from '@/api'
+import { baseApi } from '@/api'
 
 const carriers = ref([])
-const orders = ref([])
-const handovers = ref([])
+const stats = ref({})
 
 const COLORS = {
   SF: 'linear-gradient(135deg, #1f2937, #4b5563)',
@@ -96,44 +95,22 @@ const sortedCarriers = computed(() =>
   carriers.value.slice().sort((a, b) => String(a.dailyPickupTime).localeCompare(String(b.dailyPickupTime)))
 )
 
-/** 承运商 → 关联订单数 / 波次数 / 交接单数 */
-const stats = computed(() => {
-  const map = {}
-  const ensure = (code) => {
-    if (!map[code]) map[code] = { orderCount: 0, waveCount: 0, handoverCount: 0 }
-    return map[code]
-  }
-  const waveSet = {}
-  orders.value.forEach((o) => {
-    const s = ensure(o.carrierCode)
-    s.orderCount++
-    if (o.waveNo) {
-      if (!waveSet[o.carrierCode]) waveSet[o.carrierCode] = new Set()
-      waveSet[o.carrierCode].add(o.waveNo)
-    }
-  })
-  Object.entries(waveSet).forEach(([code, set]) => {
-    ensure(code).waveCount = set.size
-  })
-  handovers.value.forEach((h) => {
-    ensure(h.carrierCode).handoverCount++
-  })
-  return map
-})
-
 function logoBg(code) {
   return COLORS[code] || 'linear-gradient(135deg, #475569, #94a3b8)'
 }
 
 async function load() {
-  const [carrierList, orderRes, handoverRes] = await Promise.all([
-    baseApi.carriers(),
-    orderApi.page({ pageNum: 1, pageSize: 500 }),
-    handoverApi.page({ pageNum: 1, pageSize: 500 })
-  ])
-  carriers.value = carrierList
-  orders.value = orderRes.records
-  handovers.value = handoverRes.records
+  carriers.value = await baseApi.carriers()
+  const rows = await baseApi.carrierStats()
+  const map = {}
+  rows.forEach((row) => {
+    map[row.carrierCode] = {
+      orderCount: Number(row.orderCount) || 0,
+      waveCount: Number(row.waveCount) || 0,
+      handoverCount: Number(row.handoverCount) || 0
+    }
+  })
+  stats.value = map
 }
 
 onMounted(load)

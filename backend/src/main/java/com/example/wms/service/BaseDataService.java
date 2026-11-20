@@ -3,6 +3,7 @@ package com.example.wms.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.wms.common.Dict;
+import com.example.wms.common.SqlSupport;
 import com.example.wms.dto.PageResult;
 import com.example.wms.entity.Carrier;
 import com.example.wms.entity.Employee;
@@ -33,17 +34,20 @@ public class BaseDataService {
     private final LocationMapper locationMapper;
     private final EmployeeMapper employeeMapper;
     private final CarrierMapper carrierMapper;
+    private final SqlSupport sql;
     private final ObjectMapper objectMapper;
 
     public BaseDataService(SkuMapper skuMapper,
                            LocationMapper locationMapper,
                            EmployeeMapper employeeMapper,
                            CarrierMapper carrierMapper,
+                           SqlSupport sql,
                            ObjectMapper objectMapper) {
         this.skuMapper = skuMapper;
         this.locationMapper = locationMapper;
         this.employeeMapper = employeeMapper;
         this.carrierMapper = carrierMapper;
+        this.sql = sql;
         this.objectMapper = objectMapper;
     }
 
@@ -161,6 +165,43 @@ public class BaseDataService {
             rows.add(toMap(c));
         }
         return rows;
+    }
+
+    /** 每个承运商的订单数、波次数、交接单数。两次聚合，不取订单行和明细。 */
+    public List<Map<String, Object>> carrierStats() {
+        Map<String, Map<String, Object>> byCode = new LinkedHashMap<>();
+        for (Map<String, Object> row : sql.list(
+                "SELECT carrier_code, COUNT(*) AS order_count, " +
+                        "COUNT(DISTINCT NULLIF(wave_no, '')) AS wave_count " +
+                        "FROM `order` GROUP BY carrier_code")) {
+            String code = BizNumbers.str(row.get("carrierCode"));
+            if (code == null || code.isBlank()) continue;
+            Map<String, Object> stat = statOf(byCode, code);
+            stat.put("orderCount", number(row.get("orderCount")));
+            stat.put("waveCount", number(row.get("waveCount")));
+        }
+        for (Map<String, Object> row : sql.list(
+                "SELECT carrier_code, COUNT(*) AS handover_count FROM handover GROUP BY carrier_code")) {
+            String code = BizNumbers.str(row.get("carrierCode"));
+            if (code == null || code.isBlank()) continue;
+            statOf(byCode, code).put("handoverCount", number(row.get("handoverCount")));
+        }
+        return new ArrayList<>(byCode.values());
+    }
+
+    private static Map<String, Object> statOf(Map<String, Map<String, Object>> byCode, String code) {
+        return byCode.computeIfAbsent(code, key -> {
+            Map<String, Object> stat = new LinkedHashMap<>();
+            stat.put("carrierCode", key);
+            stat.put("orderCount", 0L);
+            stat.put("waveCount", 0L);
+            stat.put("handoverCount", 0L);
+            return stat;
+        });
+    }
+
+    private static long number(Object value) {
+        return value instanceof Number n ? n.longValue() : 0L;
     }
 
     private PageResult<Map<String, Object>> toPage(Page<?> page, int pageNum, int pageSize) {

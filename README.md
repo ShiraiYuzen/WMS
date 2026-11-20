@@ -10,7 +10,7 @@
 ![Vue](https://img.shields.io/badge/Vue-3.5-42b883)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479a1)
 ![License](https://img.shields.io/badge/License-MIT-blue)
-![Endpoints](https://img.shields.io/badge/REST%20endpoints-54-blueviolet)
+![Endpoints](https://img.shields.io/badge/REST%20endpoints-55-blueviolet)
 ![Security](https://img.shields.io/badge/security%20findings-24%20tested%20%C2%B7%2012%20fixed-critical)
 ![Tests](https://img.shields.io/badge/unit%20tests-JUnit%205-success)
 [![CI](https://github.com/ShiraiYuzen/WMS/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiraiYuzen/WMS/actions/workflows/ci.yml)
@@ -21,7 +21,7 @@
 
 这些是真正花过设计功夫的部分，不是搭一个增删改查演示：
 
-- **契约优先的接口。** [`docs/api-contract.md`](docs/api-contract.md) 是全部 54 个接口的唯一依据：路径、参数、响应形状、聚合结构和状态机。文内有同步清单和基于 `grep` 的核对步骤，文档不会悄悄和代码脱节。
+- **契约优先的接口。** [`docs/api-contract.md`](docs/api-contract.md) 是全部 55 个接口的唯一依据：路径、参数、响应形状、聚合结构和状态机。文内有同步清单和基于 `grep` 的核对步骤，文档不会悄悄和代码脱节。
 - **服务端强制的状态机。** 每次状态迁移（`WAITING → PICKING → EXCEPTION → FINISHED`）都在服务端校验，不能跳步，也不能回退。这同时关掉了三条发现（`SEC-05` / `SEC-06` / `SEC-07`）：重复提交会覆盖已经完成的记录。
 - **角色白名单授权。** 写接口用 `@RequireRole` 保护，角色不符返回 **403**。操作人**从令牌解析**，不从请求参数取——传入别人的工号没有效果（`SEC-08`）。
 - **MyBatis-Plus 数据访问。** 16 个实体加对应的 `BaseMapper`；单表增删改查用 `LambdaQueryWrapper` 和分页插件。多表和动态 SQL 走 `SqlSupport`（PreparedStatement + 驼峰 Map），复杂的仓储连接保持显式，不使用不安全的 `${sql}`。
@@ -135,7 +135,7 @@
 │       │   ├── mapper/         # 每张表一个 BaseMapper
 │       │   ├── service/        # 领域服务 + Stats
 │       │   │   └── support/    # BizNumbers、VoAssembler、OperationLogService
-│       │   ├── controller/     # 11 个薄控制器，54 个接口
+│       │   ├── controller/     # 11 个薄控制器，55 个接口
 │       │   └── dto/            # ApiResult、PageResult、LoginRequest/Response
 │       └── resources/
 │           ├── application.yml
@@ -158,7 +158,7 @@
 │   └── 一键生成演示数据.bat      # Windows：同上，UTF-8 BOM
 ├── shots-v5/                   # 按页面的截图
 ├── docs/
-│   ├── api-contract.md         # 接口依据：约定、字段、54 个接口、状态机
+│   ├── api-contract.md         # 接口依据：约定、字段、55 个接口、状态机
 │   ├── security-audit.md       # 白盒 + 黑盒 + Web 安全报告（24 条发现）
 │   └── security-fixes.md       # 已修复 12 条的变更说明和回滚步骤
 └── README.md
@@ -326,7 +326,7 @@ tools\一键生成演示数据.bat              # Windows
 
 ## 接口概览
 
-11 个模块，54 个接口。响应都是信封
+11 个模块，55 个接口。响应都是信封
 `{ "code": 0, "message": "ok", "data": {}, "timestamp": 1792389015103 }`，`code === 0` 表示成功。
 
 | 模块 | 前缀 | 接口数 |
@@ -410,7 +410,7 @@ shortage   PENDING → HANDLED → CLOSED
 
 | 文档 | 内容 |
 | --- | --- |
-| [docs/api-contract.md](docs/api-contract.md) | 全局约定、实体字段、枚举、全部 54 个接口、聚合形状、状态机 |
+| [docs/api-contract.md](docs/api-contract.md) | 全局约定、实体字段、枚举、全部 55 个接口、聚合形状、状态机 |
 | [docs/security-audit.md](docs/security-audit.md) | 安全测试报告：方法、24 条发现、复测证据、修复路线 |
 | [docs/security-fixes.md](docs/security-fixes.md) | 修复记录：改了哪些文件、每条修复的设计、构建说明、回滚步骤 |
 
