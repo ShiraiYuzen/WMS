@@ -22,12 +22,14 @@ WMS v5 演示数据一键生成器。
   ./tools/gen-demo.sh --no-verify     # 跳过校验（不推荐）
 
 也可以直接调 python：python3 tools/gen-demo-data.py --days 3
-数据库连接从 backend/src/main/resources/application.yml 读取，
-可用环境变量覆盖：WMS_DB_HOST / WMS_DB_PORT / WMS_DB_NAME / WMS_DB_USER / WMS_DB_PASS。
+每台电脑可在 backend/application-local.properties 中设置 spring.datasource.username 和
+spring.datasource.password，与后端共用。也可用 WMS_DB_USER / WMS_DB_PASS 覆盖。
+未配置密码时会在终端隐藏输入。库地址可用 WMS_DB_HOST / WMS_DB_PORT / WMS_DB_NAME 覆盖。
 """
 
 import argparse
 import datetime as dt
+import getpass
 import os
 import random
 import re
@@ -89,47 +91,53 @@ def unquote(value):
     return value
 
 
-def apply_datasource_text(text, cfg):
-    """从 properties 或 yaml 文本里取出数据源三项。"""
+def apply_datasource_text(text, cfg, *, properties=False):
+    """读取项目使用的 Spring 数据源 URL、用户名和密码。"""
     for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
+        line = raw.lstrip()
+        if properties:
+            key, sep, value = line.partition("=")
+            if not sep or not key.rstrip().startswith("spring.datasource."):
+                continue
+            key = key.rstrip()[len("spring.datasource."):]
+            value = value.lstrip()
+        else:
+            key, sep, value = line.partition(":")
+            if not sep or key not in ("url", "username", "password"):
+                continue
+            value = unquote(value)
+
+        if key not in ("url", "username", "password"):
             continue
-        if line.startswith("spring.datasource.url=") or line.startswith("url:"):
-            value = line.split("=", 1)[1] if line.startswith("spring.") else line.split(":", 1)[1]
-            m = re.search(r"//([^:/]+):(\d+)/([^?]+)", resolve_placeholder(unquote(value)))
+        if value.startswith("${"):
+            value = resolve_placeholder(value)
+        if key == "url":
+            m = re.search(r"//([^:/]+):(\d+)/([^?]+)", value)
             if m:
-                cfg["host"], cfg["port"], cfg["name"] = m.group(1), m.group(2), m.group(3)
-        elif line.startswith("spring.datasource.username=") or line.startswith("username:"):
-            value = line.split("=", 1)[1] if line.startswith("spring.") else line.split(":", 1)[1]
-            cfg["user"] = resolve_placeholder(unquote(value))
-        elif line.startswith("spring.datasource.password=") or line.startswith("password:"):
-            value = line.split("=", 1)[1] if line.startswith("spring.") else line.split(":", 1)[1]
-            cfg["pass"] = resolve_placeholder(unquote(value))
+                cfg["host"], cfg["port"], cfg["name"] = m.groups()
+        elif key == "username":
+            cfg["user"] = value
+        elif value or properties:
+            cfg["pass"] = value
 
 
 def load_config():
-    """优先读 application.yml，环境变量可覆盖，保证与后端用的是同一个库。"""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    props = os.path.join(root, "backend", "src", "main", "resources", "application.yml")
-    cfg = {"host": "127.0.0.1", "port": "3306", "name": "wms_v5", "user": "root", "pass": ""}
+    backend = os.path.join(root, "backend")
+    cfg = {"host": "127.0.0.1", "port": "3306", "name": "wms_v5", "user": "root", "pass": None}
+    for filename, properties in (("src/main/resources/application.yml", False),
+                                 ("application-local.properties", True)):
+        path = os.path.join(backend, filename)
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                apply_datasource_text(f.read(), cfg, properties=properties)
 
-    if os.path.exists(props):
-        with open(props, encoding="utf-8") as f:
-            apply_datasource_text(f.read(), cfg)
-
-        # 本地口令外置在 application-local.properties（已被 .gitignore 排除），
-        # 与后端 spring.config.import 读的是同一份，避免两边连到不同的库。
-        local_props = os.path.join(root, "backend", "application-local.properties")
-        if os.path.exists(local_props):
-            with open(local_props, encoding="utf-8") as f:
-                apply_datasource_text(f.read(), cfg)
-
-    cfg["host"] = os.environ.get("WMS_DB_HOST", cfg["host"])
-    cfg["port"] = os.environ.get("WMS_DB_PORT", cfg["port"])
-    cfg["name"] = os.environ.get("WMS_DB_NAME", cfg["name"])
-    cfg["user"] = os.environ.get("WMS_DB_USER", cfg["user"])
-    cfg["pass"] = os.environ.get("WMS_DB_PASS", cfg["pass"])
+    for key in cfg:
+        cfg[key] = os.environ.get("WMS_DB_" + key.upper(), cfg[key])
+    if cfg["pass"] is None:
+        if not sys.stdin.isatty():
+            raise SystemExit("请设置 WMS_DB_PASS 或在 backend/application-local.properties 配置数据库密码。")
+        cfg["pass"] = getpass.getpass("MySQL 密码（%s@%s，输入不回显）： " % (cfg["user"], cfg["host"]))
     return cfg
 
 
@@ -137,14 +145,15 @@ class Db:
     def __init__(self, cfg):
         self.cfg = cfg
         self.bin = mysql_bin()
+        self.env = dict(os.environ, MYSQL_PWD=cfg["pass"])
 
     def _args(self):
         return [self.bin, "-h" + self.cfg["host"], "-P" + self.cfg["port"],
-                "-u" + self.cfg["user"], "-p" + self.cfg["pass"],
+                "-u" + self.cfg["user"],
                 "--default-character-set=utf8mb4", "-D", self.cfg["name"]]
 
     def query(self, sql):
-        p = subprocess.run(self._args() + ["-N", "-B", "-e", sql], capture_output=True, text=True)
+        p = subprocess.run(self._args() + ["-N", "-B", "-e", sql], capture_output=True, text=True, env=self.env)
         if p.returncode != 0:
             raise RuntimeError(p.stderr.strip())
         return [ln.split("\t") for ln in p.stdout.strip().split("\n") if ln]
@@ -156,7 +165,7 @@ class Db:
 
     def run_script(self, path):
         with open(path, "rb") as f:
-            p = subprocess.run(self._args(), stdin=f, capture_output=True, text=True)
+            p = subprocess.run(self._args(), stdin=f, capture_output=True, text=True, env=self.env)
         return p
 
 
