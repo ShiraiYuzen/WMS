@@ -68,4 +68,9 @@ defineProps({
   flex-shrink: 0;
   flex-wrap: wrap;
 }
+@media (max-width: 900px) {
+  .page-header { flex-wrap: wrap; gap: 8px; }
+  .ph-right { flex-shrink: 1; }
+  .ph-right :deep(.el-button + .el-button) { margin-left: 0; }
+}
 </style>

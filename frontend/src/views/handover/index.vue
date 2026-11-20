@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container work-table-page">
     <PageHeader
       title="出库交接"
       description="复核完成的波次进入待交接区。按承运商归集波次生成交接单，承运商到场后核对件数并签字确认，波次与订单随即置为「已出库」。"
@@ -57,80 +57,86 @@
     </div>
 
     <!-- ======================= 表格 ======================= -->
-    <div class="card">
-      <el-table
-        v-loading="loading"
-        :data="rows"
-        stripe
-        height="calc(100vh - 596px)"
-        :row-class-name="rowClass"
-      >
-        <el-table-column label="交接单号" width="170" fixed>
-          <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="openDetail(row)">
-              <span class="mono">{{ row.handoverNo }}</span>
-            </el-link>
+    <div class="card work-table-panel">
+      <div class="work-table-slot">
+        <el-table
+          v-loading="loading"
+          ref="table" :data="rows" @scroll="rememberScroll" empty-text="没有符合当前条件的记录"
+          stripe
+          height="100%"
+          :row-class-name="rowClass"
+        >
+          <el-table-column label="交接单号" width="170" fixed>
+            <template #default="{ row }">
+              <el-link type="primary" underline="never" @click="openDetail(row)">
+                <span class="mono">{{ row.handoverNo }}</span>
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="120">
+            <template #default="{ row }">
+              <StatusTag :code="row.status" group="handoverStatus" />
+            </template>
+          </el-table-column>
+          <el-table-column label="承运商" width="120">
+            <template #default="{ row }">{{ row.carrierName }}</template>
+          </el-table-column>
+          <el-table-column label="波次号" min-width="160">
+            <template #default="{ row }">
+              <span class="mono wave-nos">{{ row.waveNos }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="订单数" width="80" align="right">
+            <template #default="{ row }"><span class="num">{{ row.orderCount }}</span></template>
+          </el-table-column>
+          <el-table-column label="包裹数" width="80" align="right">
+            <template #default="{ row }"><span class="num">{{ row.packageCount }}</span></template>
+          </el-table-column>
+          <el-table-column label="总重量" width="95" align="right">
+            <template #default="{ row }">
+              <span v-if="row.totalWeight" class="num">{{ row.totalWeight }} kg</span>
+              <span v-else class="text-secondary">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="交接人" width="85">
+            <template #default="{ row }">{{ row.handoverUserName || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="接收人 / 车牌" width="130">
+            <template #default="{ row }">
+              <div class="two-line">
+                <span>{{ row.receiveName || '—' }}</span>
+                <span class="text-secondary mono">{{ row.vehicleNo || '—' }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="创建 / 交接时间" width="150">
+            <template #default="{ row }">
+              <div class="two-line">
+                <span>{{ formatTimeShort(row.createTime) }}</span>
+                <span class="text-secondary">{{ formatTimeShort(row.handoverTime) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="140" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.status === 'CREATED'"
+                link
+                type="primary"
+                size="small"
+                @click="openConfirm(row)"
+              >
+                确认交接
+              </el-button>
+              <el-button link size="small" @click="openDetail(row)">详情</el-button>
+            </template>
+          </el-table-column>
+          <template v-if="loadError" #empty>
+            <span role="alert">{{ loadError }}</span>
+            <el-button link type="primary" @click="load">重新加载</el-button>
           </template>
-        </el-table-column>
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">
-            <StatusTag :code="row.status" group="handoverStatus" />
-          </template>
-        </el-table-column>
-        <el-table-column label="承运商" width="120">
-          <template #default="{ row }">{{ row.carrierName }}</template>
-        </el-table-column>
-        <el-table-column label="波次号" min-width="160">
-          <template #default="{ row }">
-            <span class="mono wave-nos">{{ row.waveNos }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="订单数" width="80" align="right">
-          <template #default="{ row }"><span class="num">{{ row.orderCount }}</span></template>
-        </el-table-column>
-        <el-table-column label="包裹数" width="80" align="right">
-          <template #default="{ row }"><span class="num">{{ row.packageCount }}</span></template>
-        </el-table-column>
-        <el-table-column label="总重量" width="95" align="right">
-          <template #default="{ row }">
-            <span v-if="row.totalWeight" class="num">{{ row.totalWeight }} kg</span>
-            <span v-else class="text-secondary">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="交接人" width="85">
-          <template #default="{ row }">{{ row.handoverUserName || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="接收人 / 车牌" width="130">
-          <template #default="{ row }">
-            <div class="two-line">
-              <span>{{ row.receiveName || '—' }}</span>
-              <span class="text-secondary mono">{{ row.vehicleNo || '—' }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="创建 / 交接时间" width="150">
-          <template #default="{ row }">
-            <div class="two-line">
-              <span>{{ formatTimeShort(row.createTime) }}</span>
-              <span class="text-secondary">{{ formatTimeShort(row.handoverTime) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              v-if="row.status === 'CREATED'"
-              link
-              type="primary"
-              size="small"
-              @click="openConfirm(row)"
-            >
-              确认交接
-            </el-button>
-            <el-button link size="small" @click="openDetail(row)">详情</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        </el-table>
+      </div>
 
       <el-pagination
         v-model:current-page="query.pageNum"
@@ -231,8 +237,8 @@
           <span class="ci-label">波次</span><span class="mono">{{ current.waveNos }}</span>
         </div>
         <div class="ci-row">
-          <span class="ci-label">系统件数</span>
-          <span><b class="num">{{ current.packageCount }}</b> 件 · {{ current.orderCount }} 单</span>
+          <span class="ci-label">本次交接</span>
+          <span><b class="num">{{ current.orderCount }}</b> 笔订单 · <b class="num">{{ current.packageCount }}</b> 个包裹</span>
         </div>
       </div>
 
@@ -246,7 +252,7 @@
             v-if="current && confirmForm.actualPackageCount !== current.packageCount"
             class="diff-hint"
           >
-            与系统件数不一致，将记入交接单备注
+            与系统相差 {{ Math.abs(confirmForm.actualPackageCount - current.packageCount) }} 个包裹，请核对并在备注中说明
           </span>
         </el-form-item>
         <el-form-item label="拒收">
@@ -310,6 +316,7 @@
 </template>
 
 <script setup>
+import { useWorkList } from '@/composables/useWorkList'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -325,13 +332,10 @@ const router = useRouter()
 const dict = useDictStore()
 const app = useAppStore()
 
-const loading = ref(false)
-const rows = ref([])
-const total = ref(0)
 const carriers = ref([])
 const reviewableWaves = ref([])
 
-const query = ref({ pageNum: 1, pageSize: 20, handoverNo: '', carrierCode: '', status: '' })
+const { query, rows, total, loading, loadError, table, rememberScroll, load } = useWorkList({ pageNum: 1, pageSize: 20, handoverNo: '', carrierCode: '', status: '' }, handoverApi.page)
 
 /* ------------------------------ 创建 ------------------------------ */
 
@@ -358,17 +362,6 @@ const current = ref(null)
 const confirmForm = reactive({ receiveName: '', actualPackageCount: 0, rejected: false, remark: '' })
 
 /* ------------------------------ 加载 ------------------------------ */
-
-async function load() {
-  loading.value = true
-  try {
-    const res = await handoverApi.page(query.value)
-    rows.value = res.records
-    total.value = res.total
-  } finally {
-    loading.value = false
-  }
-}
 
 async function loadReviewable() {
   reviewableWaves.value = await handoverApi.reviewableWaves()
@@ -415,6 +408,7 @@ function onWaveSelect(val) {
 }
 
 async function submitCreate() {
+  if (creating.value) return
   creating.value = true
   try {
     await handoverApi.create({
@@ -450,6 +444,7 @@ async function submitConfirm() {
     ElMessage.warning('请填写接收人')
     return
   }
+  if (confirming.value) return
   confirming.value = true
   try {
     await handoverApi.confirm({
@@ -478,8 +473,10 @@ function gotoWave(waveNo) {
 }
 
 onMounted(async () => {
-  carriers.value = await baseApi.carriers()
-  await refreshAll()
+  await Promise.allSettled([
+    refreshAll(),
+    baseApi.carriers().then(result => { carriers.value = result })
+  ])
 })
 </script>
 
@@ -627,5 +624,9 @@ onMounted(async () => {
   margin-left: 10px;
   font-size: 11.5px;
   color: $color-warning;
+}
+@media (max-width: 700px) {
+  .confirm-info { grid-template-columns: 1fr; }
+  .ci-row { overflow-wrap: anywhere; }
 }
 </style>

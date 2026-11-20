@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container" v-loading="loading">
+  <div class="page-container dashboard-page" v-loading="loading">
     <PageHeader
       title="作业看板"
       description="覆盖「订单汇聚 → 波次生成 → 拣货执行 → 复核打包 → 出库交接 → 效率复盘」全链路实时概览"
@@ -14,92 +14,97 @@
       </template>
     </PageHeader>
 
-    <!-- ======================= 指标预警 ======================= -->
-    <el-alert
-      v-if="alerts.length"
-      type="warning"
-      :closable="false"
-      show-icon
-      class="alert-bar mb-16"
-    >
-      <template #title>
-        <span style="font-weight: 600">指标预警（{{ alerts.length }} 项超出目标阈值）</span>
-      </template>
-      <div class="alert-list">
-        <span v-for="a in alerts" :key="a.metric" class="alert-item" :class="a.level.toLowerCase()">
-          <el-icon><WarningFilled /></el-icon>
-          {{ a.message }}
-        </span>
-      </div>
+    <el-alert v-if="loadError" type="error" :closable="false" show-icon>
+      <template #title>看板数据读取失败</template>
+      {{ loadError }} <el-button link type="primary" @click="loadAll">重新加载</el-button>
     </el-alert>
+    <template v-else-if="ready">
+      <!-- ======================= 指标预警 ======================= -->
+      <el-alert
+        v-if="alerts.length"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="alert-bar mb-16"
+      >
+        <template #title>
+          <span style="font-weight: 600">指标预警（{{ alerts.length }} 项超出目标阈值）</span>
+        </template>
+        <div class="alert-list">
+          <span v-for="a in alerts" :key="a.metric" class="alert-item" :class="a.level.toLowerCase()">
+            <el-icon><WarningFilled /></el-icon>
+            {{ a.message }}
+          </span>
+        </div>
+      </el-alert>
 
-    <!-- ======================= 核心 KPI ======================= -->
-    <el-row :gutter="14" class="mb-16">
-      <el-col :xs="12" :sm="12" :md="6" :lg="6">
-        <StatCard
-          label="在制波次"
-          :value="ov.workingWaves"
-          unit="个"
-          tone="primary"
-          icon="Grid"
-          :sub="`累计波次 ${ov.totalWaves} 个`"
-          to="/wave"
-        />
-      </el-col>
-      <el-col :xs="12" :sm="12" :md="6" :lg="6">
-        <StatCard
-          label="拣货效率"
-          :value="ov.pickEfficiency"
-          unit="件/小时"
-          tone="success"
-          icon="Van"
-          :sub="`平均波次耗时 ${formatDuration(ov.avgPickDurationSec)}`"
-          to="/pick"
-        />
-      </el-col>
-      <el-col :xs="12" :sm="12" :md="6" :lg="6">
-        <StatCard
-          label="差错率"
-          :value="formatPercent(ov.errorRate)"
-          tone="danger"
-          icon="CircleClose"
-          :sub="`复核通过率 ${formatPercent(ov.reviewPassRate)}`"
-          to="/analytics"
-        />
-      </el-col>
-      <el-col :xs="12" :sm="12" :md="6" :lg="6">
-        <StatCard
-          label="缺货率"
-          :value="formatPercent(ov.shortageRate)"
-          tone="warning"
-          icon="Warning"
-          :sub="`待处理缺货 ${ov.pendingShortageCount} 条`"
-          to="/shortage"
-        />
-      </el-col>
-    </el-row>
+      <!-- ======================= 核心 KPI ======================= -->
+      <el-row :gutter="14" class="mb-16">
+        <el-col :xs="12" :sm="12" :md="6" :lg="6">
+          <StatCard
+            label="在制波次"
+            :value="ov.workingWaves"
+            unit="个"
+            tone="primary"
+            icon="Grid"
+            :sub="`累计波次 ${ov.totalWaves} 个`"
+            to="/wave"
+          />
+        </el-col>
+        <el-col :xs="12" :sm="12" :md="6" :lg="6">
+          <StatCard
+            label="拣货效率"
+            :value="ov.pickEfficiency"
+            unit="件/小时"
+            :tone="metricTone('pickEfficiency', 'success')"
+            icon="Van"
+            :sub="`平均波次耗时 ${formatDuration(ov.avgPickDurationSec)}`"
+            to="/pick"
+          />
+        </el-col>
+        <el-col :xs="12" :sm="12" :md="6" :lg="6">
+          <StatCard
+            label="差错率"
+            :value="formatPercent(ov.errorRate)"
+            :tone="metricTone('errorRate')"
+            icon="CircleClose"
+            :sub="`复核通过率 ${formatPercent(ov.reviewPassRate)}`"
+            to="/analytics"
+          />
+        </el-col>
+        <el-col :xs="12" :sm="12" :md="6" :lg="6">
+          <StatCard
+            label="缺货率"
+            :value="formatPercent(ov.shortageRate)"
+            :tone="metricTone('shortageRate')"
+            icon="Warning"
+            :sub="`待处理缺货 ${ov.pendingShortageCount} 条`"
+            to="/shortage"
+          />
+        </el-col>
+      </el-row>
 
-    <!-- ======================= 全链路水位 + 待办 ======================= -->
-    <el-row :gutter="14" class="mb-16">
-      <el-col :xs="24" :md="16">
-        <div class="card card-pad full-h">
+      <!-- ======================= 全链路水位 + 待办 ======================= -->
+      <div class="workflow-row mb-16">
+        <div class="card card-pad full-h pipeline-panel">
           <div class="panel-head">
             <span class="panel-title">全链路作业水位</span>
-            <span class="panel-sub">按环节展示「待处理 / 进行中」数量，快速定位积压点</span>
+            <span class="panel-sub">各环节当前数量</span>
           </div>
           <div class="pipeline">
             <div v-for="(p, i) in pipeline" :key="p.stage" class="pipe-node">
               <div class="pipe-card" :class="{ hot: p.pending > 0 }">
-                <div class="pipe-stage">{{ p.stage }}</div>
+                <router-link v-if="stageTarget(p.stage)" class="pipe-stage stage-link" :to="stageTarget(p.stage)">{{ p.stage }} ›</router-link>
+                <span v-else class="pipe-stage">{{ p.stage }}</span>
                 <div class="pipe-nums">
                   <div class="pipe-num">
                     <span class="num pending">{{ p.pending }}</span>
-                    <span class="pipe-lbl">待处理</span>
+                    <span class="pipe-lbl">{{ stages[p.stage]?.pending || '待处理' }}</span>
                   </div>
                   <div class="pipe-divider"></div>
                   <div class="pipe-num">
                     <span class="num working">{{ p.working }}</span>
-                    <span class="pipe-lbl">进行中</span>
+                    <span class="pipe-lbl">{{ stages[p.stage]?.working || '进行中' }}</span>
                   </div>
                 </div>
               </div>
@@ -109,70 +114,69 @@
             </div>
           </div>
         </div>
-      </el-col>
 
-      <el-col :xs="24" :md="8">
         <div class="card card-pad full-h">
           <div class="panel-head">
             <span class="panel-title">我的待办</span>
             <span class="panel-sub">点击直接跳转处理</span>
           </div>
           <div class="todo-list">
-            <div
-              v-for="t in todos"
-              :key="t.name"
+            <button
+              v-for="t in activeTodos"
+              :key="t.path"
+              type="button"
               class="todo-row"
-              :class="{ empty: !t.count }"
-              @click="t.count > 0 && router.push(t.path)"
+              :class="{ shortage: t.path === '/shortage' }"
+              @click="router.push(t.path)"
             >
-              <div class="todo-left">
-                <span class="todo-dot" :class="{ on: t.count > 0 }"></span>
-                <span class="todo-name">{{ t.name }}</span>
-              </div>
-              <div class="todo-right">
-                <span class="todo-count num">{{ t.count }}</span>
-                <el-icon class="todo-arrow"><ArrowRight /></el-icon>
-              </div>
+              <span class="todo-name">{{ t.name }}</span>
+              <span class="todo-count num">{{ t.count }}</span>
+              <el-icon class="todo-arrow"><ArrowRight /></el-icon>
+            </button>
+          </div>
+          <details v-if="emptyTodos.length" class="todo-empty">
+            <summary>{{ emptyTodos.length }} 项待办为零</summary>
+            <div>{{ emptyTodos.map(t => t.name).join('、') }}</div>
+          </details>
+        </div>
+
+      </div>
+
+      <!-- ======================= 趋势图 ======================= -->
+      <el-row :gutter="14">
+        <el-col :xs="24" :md="14">
+          <div class="card card-pad">
+            <div class="panel-head">
+              <span class="panel-title">作业量趋势</span>
+              <span class="panel-sub">波次数 / 订单数 / 拣货件数</span>
             </div>
+            <ChartBox :option="volumeOption" height="288px" />
           </div>
-        </div>
-      </el-col>
-    </el-row>
+        </el-col>
+        <el-col :xs="24" :md="10">
+          <div class="card card-pad">
+            <div class="panel-head">
+              <span class="panel-title">效率与质量趋势</span>
+              <span class="panel-sub">拣货效率（件/小时）/ 差错率</span>
+            </div>
+            <ChartBox :option="qualityOption" height="288px" />
+          </div>
+        </el-col>
+      </el-row>
 
-    <!-- ======================= 趋势图 ======================= -->
-    <el-row :gutter="14">
-      <el-col :xs="24" :md="14">
-        <div class="card card-pad">
-          <div class="panel-head">
-            <span class="panel-title">作业量趋势</span>
-            <span class="panel-sub">波次数 / 订单数 / 拣货件数</span>
+      <!-- ======================= 环节耗时 ======================= -->
+      <el-row :gutter="14" class="mt-16">
+        <el-col :span="24">
+          <div class="card card-pad">
+            <div class="panel-head">
+              <span class="panel-title">平均波次耗时</span>
+              <span class="panel-sub">从波次生成到交接完成的平均时长（分钟）</span>
+            </div>
+            <ChartBox :option="durationOption" height="240px" />
           </div>
-          <ChartBox :option="volumeOption" height="288px" />
-        </div>
-      </el-col>
-      <el-col :xs="24" :md="10">
-        <div class="card card-pad">
-          <div class="panel-head">
-            <span class="panel-title">效率与质量趋势</span>
-            <span class="panel-sub">拣货效率（件/小时）/ 差错率</span>
-          </div>
-          <ChartBox :option="qualityOption" height="288px" />
-        </div>
-      </el-col>
-    </el-row>
-
-    <!-- ======================= 环节耗时 ======================= -->
-    <el-row :gutter="14" class="mt-16">
-      <el-col :span="24">
-        <div class="card card-pad">
-          <div class="panel-head">
-            <span class="panel-title">平均波次耗时</span>
-            <span class="panel-sub">从波次生成到交接完成的平均时长（分钟）</span>
-          </div>
-          <ChartBox :option="durationOption" height="240px" />
-        </div>
-      </el-col>
-    </el-row>
+        </el-col>
+      </el-row>
+    </template>
   </div>
 </template>
 
@@ -183,36 +187,68 @@ import { Refresh } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import ChartBox from '@/components/ChartBox.vue'
+import { useAppStore } from '@/stores/app'
 import { dashboardApi } from '@/api'
 import { axisStyle, splitLine, legend, trendGrid, trendXAxis } from '@/utils/chart'
 import { formatDuration, formatPercent, formatNumber } from '@/utils'
 
 const router = useRouter()
+const app = useAppStore()
+const stages = {
+  '订单汇聚': { path: '/order', status: 'CREATED', pending: '待汇聚', working: '已入池' },
+  '波次生成': { path: '/wave', status: 'CREATED', pending: '待分配', working: '已分配' },
+  '拣货执行': { path: '/pick', status: 'WAITING', pending: '待拣货', working: '拣货中' },
+  '复核打包': { path: '/review', status: 'WAITING', pending: '待复核', working: '有差异' },
+  '出库交接': { path: '/handover', pending: '待交接', working: '已交接' }
+}
+
+function stageTarget(stage) {
+  const entry = stages[stage]
+  if (!entry || !app.canAccess(router.resolve(entry.path).meta.roles)) return null
+  return { path: entry.path, query: entry.status ? { status: entry.status } : {} }
+}
 
 const loading = ref(false)
+const ready = ref(false)
+const loadError = ref('')
+let requestId = 0
 const days = ref(7)
 const ov = ref({})
 const pipeline = ref([])
 const todos = ref([])
 const trend = ref([])
 
+const activeTodos = computed(() => todos.value.filter(t => t.count > 0))
+const emptyTodos = computed(() => todos.value.filter(t => !t.count))
 const alerts = computed(() => ov.value.alerts || [])
+
+function metricTone(metric, normal = 'default') {
+  const alert = alerts.value.find(a => a.metric === metric)
+  if (!alert) return normal
+  return alert.level === 'DANGER' ? 'danger' : 'warning'
+}
 
 /* ------------------------------ 数据加载 ------------------------------ */
 
 async function loadAll() {
+  const id = ++requestId
+  loadError.value = ''
   loading.value = true
   try {
     const [summary, trendData] = await Promise.all([
       dashboardApi.summary(days.value),
       dashboardApi.trend(days.value)
     ])
+    if (id !== requestId) return
+    ready.value = true
     ov.value = summary.overview || {}
     pipeline.value = summary.pipeline || []
     todos.value = summary.todos || []
     trend.value = trendData || []
+  } catch (error) {
+    if (id === requestId) loadError.value = error.message || '请检查后端连接'
   } finally {
-    loading.value = false
+    if (id === requestId) loading.value = false
   }
 }
 
@@ -380,6 +416,28 @@ onMounted(loadAll)
   }
 }
 
+.dashboard-page { container-type: inline-size; }
+.workflow-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.pipe-stage { display: block; }
+.stage-link { color: var(--wms-primary-dark); }
+.stage-link:hover { text-decoration: underline; }
+@container (max-width: 1320px) {
+  .workflow-row { grid-template-columns: minmax(0, 1fr); }
+  .workflow-row .todo-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container (max-width: 720px) {
+  .workflow-row .todo-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .panel-head { flex-wrap: wrap; }
+}
+@container (max-width: 400px) {
+  .workflow-row .todo-list { grid-template-columns: 1fr; }
+}
+
+
 .full-h {
   height: 100%;
 }
@@ -398,24 +456,26 @@ onMounted(loadAll)
 }
 
 .panel-sub {
-  font-size: 11.5px;
-  color: $text-placeholder;
+  font-size: 12px;
+  color: $text-secondary;
 }
 
 /* ------------------------------ 全链路水位 ------------------------------ */
 
+.pipeline-panel {
+  container: stages / inline-size;
+}
+
 .pipeline {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(142px, 100%), 1fr));
+  gap: 8px 22px;
 }
 
 .pipe-node {
+  position: relative;
   display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 128px;
+  min-width: 0;
 }
 
 .pipe-card {
@@ -457,7 +517,7 @@ onMounted(loadAll)
   line-height: 1;
 
   &.pending {
-    color: #f59e0b;
+    color: $text-primary;
   }
 
   &.working {
@@ -466,8 +526,9 @@ onMounted(loadAll)
 }
 
 .pipe-lbl {
-  font-size: 10.5px;
-  color: $text-placeholder;
+  white-space: nowrap;
+  font-size: 12px;
+  color: $text-secondary;
 }
 
 .pipe-divider {
@@ -477,7 +538,8 @@ onMounted(loadAll)
 }
 
 .pipe-arrow {
-  flex-shrink: 0;
+  position: absolute;
+  inset: 0 -22px 0 auto;
   width: 22px;
   display: flex;
   align-items: center;
@@ -485,74 +547,70 @@ onMounted(loadAll)
   color: #cbd5e1;
 }
 
+/* Five 142px cards and four 22px connectors fit on one line. */
+@container stages (width < 798px) {
+  .pipeline { column-gap: 8px; }
+  .pipe-arrow { display: none; }
+}
+
 /* ------------------------------ 待办 ------------------------------ */
 
 .todo-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 6px;
 }
 
 .todo-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 9px 10px;
-  border-radius: 7px;
+  gap: 6px;
+  padding: 8px 10px;
+  background: $bg-page;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  color: $text-regular;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s;
 
   &:hover {
-    background: #f1f5f9;
+    border-color: #bfdbfe;
+    background: var(--wms-primary-soft);
   }
 
-  &.empty {
-    cursor: default;
-    opacity: 0.55;
-
-    &:hover {
-      background: transparent;
-    }
-  }
-}
-
-.todo-left {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.todo-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #cbd5e1;
-
-  &.on {
-    background: #ef4444;
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+  &.shortage .todo-count {
+    color: $color-danger;
   }
 }
 
 .todo-name {
+  flex: 1;
   font-size: 13px;
-  color: $text-regular;
-}
-
-.todo-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .todo-count {
   font-size: 15px;
   font-weight: 700;
-  color: $text-primary;
 }
 
 .todo-arrow {
+  color: $text-secondary;
   font-size: 12px;
-  color: #cbd5e1;
+}
+
+.todo-empty {
+  color: $text-secondary;
+  font-size: 12px;
+  line-height: 1.6;
+
+  summary {
+    width: fit-content;
+    cursor: pointer;
+  }
+}
+
+.todo-list:not(:empty) + .todo-empty {
+  margin-top: 8px;
 }
 </style>

@@ -20,7 +20,7 @@
           </div>
           <div class="ov-actions">
             <el-button
-              v-if="['WAITING', 'DIFF'].includes(review.status)"
+              v-if="editable"
               type="primary"
               :icon="Select"
               :loading="submitting"
@@ -35,7 +35,7 @@
         <div class="ov-grid">
           <div class="ov-item">
             <span class="ov-label">波次号</span>
-            <el-link type="primary" :underline="false" @click="gotoWave">
+            <el-link type="primary" underline="never" @click="gotoWave">
               <span class="mono">{{ review.waveNo }}</span>
             </el-link>
           </div>
@@ -71,14 +71,14 @@
             <div class="os-value"><span class="num">{{ review.shouldQty }}</span> 件</div>
           </div>
           <div class="ov-stat">
-            <div class="os-label">本次核对实收</div>
-            <div class="os-value"><span class="num">{{ checkedTotal }}</span> 件</div>
+            <div class="os-label">{{ editable ? '本次核对实收' : '已提交实收' }}</div>
+            <div class="os-value"><span class="num">{{ editable ? checkedTotal : review.actualQty }}</span> 件</div>
           </div>
           <div class="ov-stat" :class="{ 'is-bad': diffCount > 0 }">
-            <div class="os-label">差异行数</div>
+            <div class="os-label">差异项数</div>
             <div class="os-value">
-              <span class="num">{{ diffCount }}</span> 行
-              <span v-if="diffCount" class="os-warn">需登记</span>
+              <span class="num">{{ diffCount }}</span> 项
+              <span v-if="editable && diffCount" class="os-warn">需登记</span>
             </div>
           </div>
         </div>
@@ -88,15 +88,9 @@
       <div class="card mb-12">
         <div class="card-head">
           <span class="panel-title">核对明细</span>
-          <span class="panel-sub">应发数量取自订单，实拣数量取自拣货回写。修改「本次核对」后不一致的行自动列为差异。</span>
+          <span v-if="editable" class="panel-sub">应发数量取自订单，实拣数量取自拣货回写。修改「本次核对」后不一致的行自动列为差异。</span>
         </div>
         <el-table :data="lines" stripe size="small" :row-class-name="lineRowClass">
-          <el-table-column label="行号" width="60" align="center">
-            <template #default="{ row }"><span class="num">{{ row.lineNo }}</span></template>
-          </el-table-column>
-          <el-table-column label="库位" width="120">
-            <template #default="{ row }"><span class="mono">{{ row.locationCode }}</span></template>
-          </el-table-column>
           <el-table-column label="商品" min-width="200">
             <template #default="{ row }">
               <div class="sku-cell">
@@ -105,21 +99,10 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="规格" width="110">
-            <template #default="{ row }"><span class="text-secondary">{{ row.spec }}</span></template>
-          </el-table-column>
-          <el-table-column label="单位" width="65" align="center">
-            <template #default="{ row }">{{ row.unit }}</template>
-          </el-table-column>
           <el-table-column label="应发" width="75" align="right">
             <template #default="{ row }"><span class="num">{{ row.qty }}</span></template>
           </el-table-column>
-          <el-table-column label="拣货回写" width="90" align="right">
-            <template #default="{ row }">
-              <span class="num" :class="{ danger: (row.pickedQty || 0) < row.qty }">{{ row.pickedQty || 0 }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="本次核对" width="140" align="center">
+          <el-table-column v-if="editable" label="本次核对" width="140" align="center">
             <template #default="{ row }">
               <el-input-number
                 v-model="row.checkQty"
@@ -132,13 +115,13 @@
               />
             </template>
           </el-table-column>
-          <el-table-column label="差异" width="80" align="right">
+          <el-table-column v-if="editable" label="差异" width="80" align="right">
             <template #default="{ row }">
-              <span v-if="rowDiff(row) === 0" class="text-success">—</span>
-              <span v-else class="num text-danger">{{ rowDiff(row) > 0 ? '+' : '' }}{{ rowDiff(row) }}</span>
+              <span v-if="rowDiff(row) === 0" class="text-secondary">一致</span>
+              <span v-else class="num text-danger">{{ rowDiff(row) > 0 ? '多' : '少' }} {{ Math.abs(rowDiff(row)) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="差异类型" width="140">
+          <el-table-column v-if="editable" label="差异类型" width="140">
             <template #default="{ row }">
               <el-select
                 v-if="rowDiff(row) !== 0"
@@ -157,7 +140,7 @@
               <span v-else class="text-secondary">—</span>
             </template>
           </el-table-column>
-          <el-table-column label="责任环节" width="130">
+          <el-table-column v-if="editable" label="责任环节" width="130">
             <template #default="{ row }">
               <el-select
                 v-if="rowDiff(row) !== 0"
@@ -171,6 +154,39 @@
               <span v-else class="text-secondary">—</span>
             </template>
           </el-table-column>
+          <el-table-column label="拣货回写" width="90" align="right">
+            <template #default="{ row }">
+              <span class="num" :class="{ danger: (row.pickedQty || 0) < row.qty }">{{ row.pickedQty || 0 }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="规格" width="110">
+            <template #default="{ row }"><span class="text-secondary">{{ row.spec }}</span></template>
+          </el-table-column>
+          <el-table-column label="单位" width="65" align="center">
+            <template #default="{ row }">{{ row.unit }}</template>
+          </el-table-column>
+          <el-table-column label="行号" width="60" align="center">
+            <template #default="{ row }"><span class="num">{{ row.lineNo }}</span></template>
+          </el-table-column>
+          <el-table-column label="库位" width="120">
+            <template #default="{ row }"><span class="mono">{{ row.locationCode }}</span></template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div v-if="!editable && review.diffItems?.length" class="card mb-12">
+        <div class="card-head"><span class="panel-title">已登记差异</span></div>
+        <el-table :data="review.diffItems" size="small">
+          <el-table-column prop="skuName" label="商品" min-width="140" />
+          <el-table-column prop="shouldQty" label="应发" width="68" />
+          <el-table-column prop="actualQty" label="实收" width="68" />
+          <el-table-column label="差异类型" width="100">
+            <template #default="{ row }">{{ dict.text('diffType', row.diffType) }}</template>
+          </el-table-column>
+          <el-table-column label="责任环节" width="110">
+            <template #default="{ row }">{{ STAGES.find(s => s.code === row.responsibleStage)?.desc || row.responsibleStage }}</template>
+          </el-table-column>
+          <el-table-column prop="remark" label="说明" min-width="160" />
         </el-table>
       </div>
 
@@ -264,6 +280,9 @@
       </div>
     </template>
 
+    <el-alert v-else-if="loadError" type="error" :closable="false">
+      {{ loadError }} <el-button link type="primary" @click="load">重新加载</el-button>
+    </el-alert>
     <el-empty v-else-if="!loading" description="复核单不存在" />
   </div>
 </template>
@@ -287,6 +306,7 @@ const app = useAppStore()
 
 const reviewNo = route.params.reviewNo
 const loading = ref(false)
+const loadError = ref('')
 const submitting = ref(false)
 const review = ref(null)
 const lines = ref([])
@@ -309,14 +329,14 @@ const STAGES = [
 const diffTypeOptions = computed(() => dict.options('diffType').filter((o) => o.code !== 'NONE'))
 
 /** 已提交的复核单只读 */
-const editable = computed(() => ['WAITING', 'DIFF'].includes(review.value?.status))
+const editable = computed(() => review.value?.status === 'WAITING')
 
 /* ------------------------------ 计算 ------------------------------ */
 
 const checkedTotal = computed(() => lines.value.reduce((s, l) => s + (Number(l.checkQty) || 0), 0))
 
 const diffCount = computed(
-  () => lines.value.filter((l) => rowDiff(l) !== 0).length + extraDiffs.value.length
+  () => editable.value ? lines.value.filter((l) => rowDiff(l) !== 0).length + extraDiffs.value.length : (review.value?.diffItems || []).length
 )
 
 function rowDiff(row) {
@@ -324,12 +344,13 @@ function rowDiff(row) {
 }
 
 function lineRowClass({ row }) {
-  return rowDiff(row) !== 0 ? 'row-diff' : ''
+  return editable.value && rowDiff(row) !== 0 ? 'row-diff' : ''
 }
 
 /* ------------------------------ 加载 ------------------------------ */
 
 async function load() {
+  loadError.value = ''
   loading.value = true
   try {
     const data = await reviewApi.detail(reviewNo)
@@ -355,6 +376,8 @@ async function load() {
       responsibleStage: d.responsibleStage || 'PICK',
       remark: d.remark || ''
     }))
+  } catch (error) {
+    loadError.value = error.message || '复核单读取失败'
   } finally {
     loading.value = false
   }
@@ -412,6 +435,11 @@ function buildDiffItems() {
 }
 
 async function openSubmit() {
+  if (submitting.value || !editable.value) return
+  if (extraDiffs.value.some(d => !d.skuCode)) {
+    ElMessage.warning('请先选择差异商品，或删除空白差异行')
+    return
+  }
   const diffs = buildDiffItems()
   const text = diffs.length
     ? `本次复核登记 ${diffs.length} 项差异，将计入差错率统计。确认提交？`
@@ -444,7 +472,8 @@ async function openSubmit() {
 }
 
 function goBack() {
-  router.push('/review')
+  if (history.state?.back?.split('?')[0] === '/review') router.back()
+  else router.push('/review')
 }
 
 function gotoWave() {
@@ -601,5 +630,9 @@ onMounted(load)
     margin-bottom: 4px;
     margin-right: 20px;
   }
+}
+@media (max-width: 900px) {
+  .ov-grid, .ov-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card-head, .ov-head { flex-wrap: wrap; }
 }
 </style>

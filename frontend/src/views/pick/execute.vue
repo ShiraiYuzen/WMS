@@ -1,13 +1,14 @@
 <template>
-  <div class="page-container" v-loading="loading">
+  <div class="page-container work-table-page" v-loading="loading">
     <PageHeader :title="`拣货作业 · ${taskNo}`" :description="task ? `波次 ${task.waveNo}` : ''">
       <template #actions>
         <el-button :icon="Back" @click="router.back()">返回</el-button>
+        <el-button v-if="task?.status === 'WAITING'" type="primary" :loading="saving" @click="startTask">领取开工</el-button>
         <el-button
-          v-if="task && task.status !== 'FINISHED'"
+          v-if="task && !task.finishTime && ['PICKING', 'EXCEPTION'].includes(task.status)"
           type="success"
           :icon="CircleCheck"
-          :disabled="pendingCount > 0"
+          :disabled="pendingCount > 0" :loading="saving"
           @click="onFinish"
         >
           完成拣货
@@ -26,9 +27,9 @@
           </div>
           <div class="eh-right">
             <el-progress
-              :percentage="task.progress"
+              :percentage="processedPercent" aria-label="明细处理进度"
               :stroke-width="10"
-              :color="task.progress >= 100 ? '#16a34a' : '#2563eb'"
+              :color="processedPercent >= 100 ? '#16a34a' : '#2563eb'"
               style="width: 240px"
             />
           </div>
@@ -68,77 +69,56 @@
       </div>
 
       <!-- ======================= 明细行 ======================= -->
-      <div class="card">
+      <div class="card work-table-panel pick-panel">
         <div class="card-pad" style="padding-bottom: 0">
           <div class="panel-head">
             <span class="panel-title">拣货明细（按库位路径排序）</span>
             <span class="panel-sub">
               剩余 {{ pendingCount }} 行待处理
-              <el-tag v-if="pendingCount === 0" type="success" size="small" effect="plain" style="margin-left: 8px">
+              <el-tag v-if="pendingCount === 0 && !task.finishTime" type="success" size="small" effect="plain" style="margin-left: 8px">
                 已全部处理，可结单
               </el-tag>
             </span>
           </div>
         </div>
 
-        <el-table :data="task.items" stripe height="calc(100vh - 508px)" :row-class-name="rowClass">
-          <el-table-column label="序" width="56" align="center">
-            <template #default="{ row }">
-              <div class="seq-badge" :class="{ done: row.status !== 'PENDING', current: isCurrent(row) }">
-                {{ row.seqNo }}
+        <div ref="pickList" class="pick-list">
+          <div class="pick-columns" aria-hidden="true">
+            <span>库位</span><span>商品 / 明细</span><span>应拣</span><span>实拣</span><span>状态</span><span>操作</span>
+          </div>
+          <ol>
+            <li v-for="row in task.items" :key="row.id" class="pick-line"
+                :class="{ current: isCurrent(row), shortage: row.shortageQty > 0 }"
+                :aria-current="isCurrent(row) ? 'step' : undefined">
+              <span class="location"><small>{{ row.seqNo }}</small><b class="mono">{{ row.locationCode }}</b></span>
+              <details class="product">
+                <summary>{{ row.skuName }}</summary>
+                <div>{{ row.skuCode }} · {{ row.spec }}</div>
+                <div>关联订单 {{ row.relatedOrderNos || '—' }}</div>
+              </details>
+              <span class="quantity"><small>应拣 </small><b class="num">{{ row.shouldQty }}</b> {{ row.unit }}</span>
+              <span class="quantity"><small>实拣 </small>{{ row.status === 'PENDING' ? '—' : row.actualQty }}</span>
+              <div class="item-status">
+                <StatusTag :code="row.status" group="pickItemStatus" />
+                <span v-if="row.shortageQty > 0" class="text-danger">缺 {{ row.shortageQty }} {{ row.unit }}</span>
               </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="库位" width="120">
-            <template #default="{ row }"><span class="mono loc">{{ row.locationCode }}</span></template>
-          </el-table-column>
-          <el-table-column label="SKU" width="115">
-            <template #default="{ row }"><span class="mono">{{ row.skuCode }}</span></template>
-          </el-table-column>
-          <el-table-column prop="skuName" label="商品名称" min-width="150" />
-          <el-table-column prop="spec" label="规格" width="95" />
-          <el-table-column label="应拣数量" width="100" align="center">
-            <template #default="{ row }">
-              <span class="num should-qty">{{ row.shouldQty }}</span>
-              <span class="unit">{{ row.unit }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="实拣数量" width="100" align="center">
-            <template #default="{ row }">
-              <span v-if="row.status === 'PENDING'" class="text-secondary">—</span>
-              <span v-else class="num" :class="row.actualQty === row.shouldQty ? 'success' : 'warning'">
-                {{ row.actualQty }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column label="缺货" width="80" align="center">
-            <template #default="{ row }">
-              <span v-if="row.shortageQty > 0" class="num danger">{{ row.shortageQty }}</span>
-              <span v-else class="text-secondary">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="105">
-            <template #default="{ row }"><StatusTag :code="row.status" group="pickItemStatus" /></template>
-          </el-table-column>
-          <el-table-column label="关联订单" min-width="200" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span class="mono small">{{ row.relatedOrderNos }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="170" fixed="right">
-            <template #default="{ row }">
-              <template v-if="task.status !== 'FINISHED'">
-                <el-button link type="primary" size="small" @click="openConfirm(row)">
-                  {{ row.status === 'PENDING' ? '确认拣货' : '修改' }}
+              <div class="item-actions" v-if="!task.finishTime && ['PICKING', 'EXCEPTION'].includes(task.status) && !row.shortageQty">
+                <el-button :link="!isCurrent(row)" type="primary" @click="openConfirm(row)">
+                  {{ needsPick(row) ? '确认拣货' : '修改' }}
                 </el-button>
-                <el-button link type="danger" size="small" @click="openShortage(row)">上报缺货</el-button>
-              </template>
-              <span v-else class="text-secondary">已结单</span>
-            </template>
-          </el-table-column>
-        </el-table>
+                <el-button v-if="row.shouldQty > (row.actualQty || 0) && !row.shortageQty"
+                           link @click="openShortage(row)">上报缺货</el-button>
+              </div>
+              <span v-else class="text-secondary">{{ task.finishTime || task.status === 'FINISHED' ? '已结单' : row.shortageQty ? '缺货已上报' : '待开工' }}</span>
+            </li>
+          </ol>
+        </div>
       </div>
     </template>
+
+    <el-alert v-if="loadError" type="error" :closable="false">
+      {{ loadError }} <el-button link type="primary" @click="load">重试</el-button>
+    </el-alert>
 
     <!-- ======================= 确认拣货 ======================= -->
     <el-dialog v-model="confirmVisible" title="确认拣货" width="460px">
@@ -175,7 +155,7 @@
 
         <el-alert v-if="confirmQty < currentItem.shouldQty" type="warning" :closable="false" show-icon class="mt-12">
           <template #title>
-            实拣少于应拣，差额 <b>{{ currentItem.shouldQty - confirmQty }}</b> 件将自动生成缺货记录，待波次员处理。
+            实拣少于应拣，本次先保存实拣数量。剩余 <b>{{ currentItem.shouldQty - confirmQty }}</b> 件可继续拣货，也可通过「上报缺货」登记。
           </template>
         </el-alert>
 
@@ -183,7 +163,7 @@
       </div>
       <template #footer>
         <el-button @click="confirmVisible = false">取消</el-button>
-        <el-button type="primary" @click="doConfirm">确认</el-button>
+        <el-button type="primary" :loading="saving" @click="doConfirm">确认</el-button>
       </template>
     </el-dialog>
 
@@ -205,7 +185,7 @@
 
         <el-form label-width="90px" class="mt-16">
           <el-form-item label="缺货数量">
-            <el-input-number v-model="shortageQty" :min="1" :max="currentItem.shouldQty" controls-position="right" style="width: 160px" />
+            <el-input-number v-model="shortageQty" :min="1" :max="currentItem.shouldQty - (currentItem.actualQty || 0)" controls-position="right" style="width: 160px" />
             <span class="unit" style="margin-left: 6px">{{ currentItem.unit }}</span>
           </el-form-item>
           <el-form-item label="缺货原因">
@@ -231,14 +211,14 @@
       </div>
       <template #footer>
         <el-button @click="shortageVisible = false">取消</el-button>
-        <el-button type="danger" @click="doReportShortage">确认上报</el-button>
+        <el-button type="danger" :loading="saving" @click="doReportShortage">确认上报</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, CircleCheck, Position, Location } from '@element-plus/icons-vue'
@@ -256,20 +236,30 @@ const loading = ref(false)
 const task = ref(null)
 const taskNo = computed(() => route.params.taskNo)
 
-const pendingCount = computed(() => (task.value?.items || []).filter((i) => i.status === 'PENDING').length)
+const pickList = ref(null)
+const saving = ref(false)
+const loadError = ref('')
 
-/** 当前应拣的第一行（用于高亮） */
-const currentSeq = computed(() => {
-  const first = (task.value?.items || []).find((i) => i.status === 'PENDING')
-  return first ? first.seqNo : -1
+function needsPick(row) {
+  return row.status === 'PENDING' || (row.actualQty || 0) + (row.shortageQty || 0) < row.shouldQty
+}
+
+const pending = computed(() => (task.value?.items || []).filter(needsPick))
+const pendingCount = computed(() => pending.value.length)
+const processedPercent = computed(() => {
+  const count = task.value?.items?.length || 0
+  return count ? Math.round((count - pendingCount.value) * 100 / count) : 0
 })
+const isCurrent = row => !task.value?.finishTime && task.value?.status !== 'WAITING' && row.id === pending.value[0]?.id
 
-const isCurrent = (row) => row.seqNo === currentSeq.value
-
-function rowClass({ row }) {
-  if (row.status === 'PENDING' && isCurrent(row)) return 'row-current'
-  if (row.status === 'SHORTAGE' || row.status === 'PARTIAL') return 'row-warn'
-  return ''
+async function revealNext() {
+  await nextTick()
+  const list = pickList.value
+  const row = list?.querySelector('[aria-current="step"]')
+  if (!row) return
+  const frame = list.getBoundingClientRect()
+  const box = row.getBoundingClientRect()
+  if (box.top < frame.top + 36 || box.bottom > frame.bottom) list.scrollTop += box.top - frame.top - 36
 }
 
 /* ------------------------------ 加载 ------------------------------ */
@@ -277,7 +267,11 @@ function rowClass({ row }) {
 async function load() {
   loading.value = true
   try {
+    loadError.value = ''
     task.value = await pickApi.detail(taskNo.value)
+    await revealNext()
+  } catch (error) {
+    loadError.value = error.message || '任务读取失败'
   } finally {
     loading.value = false
   }
@@ -298,16 +292,22 @@ function openConfirm(row) {
 }
 
 async function doConfirm() {
-  await pickApi.confirmItem({
-    itemId: currentItem.value.id,
-    actualQty: confirmQty.value,
-    pickerNo: task.value.pickerNo,
-    remark: confirmRemark.value
-  })
-  ElMessage.success(confirmQty.value < currentItem.value.shouldQty ? '已确认，差额已生成缺货记录' : '已确认拣货')
-  confirmVisible.value = false
-  await load()
-  window.__wmsRefreshBadge?.()
+  if (saving.value) return
+  saving.value = true
+  try {
+    task.value = await pickApi.confirmItem({
+      itemId: currentItem.value.id,
+      actualQty: confirmQty.value,
+      pickerNo: task.value.pickerNo,
+      remark: confirmRemark.value
+    })
+    ElMessage.success(confirmQty.value < currentItem.value.shouldQty ? '已保存实拣数量，剩余件数待处理' : '已确认拣货')
+    confirmVisible.value = false
+    await revealNext()
+    window.__wmsRefreshBadge?.()
+  } finally {
+    saving.value = false
+  }
 }
 
 /* ------------------------------ 上报缺货 ------------------------------ */
@@ -326,35 +326,58 @@ function openShortage(row) {
 }
 
 async function doReportShortage() {
-  await pickApi.reportShortage({
-    itemId: currentItem.value.id,
-    shortageQty: shortageQty.value,
-    reason: shortageReason.value,
-    pickerNo: task.value.pickerNo,
-    pickerName: task.value.pickerName,
-    remark: shortageRemark.value
-  })
-  ElMessage.warning('缺货已上报，等待波次员处理')
-  shortageVisible.value = false
-  await load()
-  window.__wmsRefreshBadge?.()
+  if (saving.value) return
+  saving.value = true
+  try {
+    task.value = await pickApi.reportShortage({
+      itemId: currentItem.value.id,
+      shortageQty: shortageQty.value,
+      reason: shortageReason.value,
+      pickerNo: task.value.pickerNo,
+      pickerName: task.value.pickerName,
+      remark: shortageRemark.value
+    })
+    ElMessage.warning('缺货已上报，等待波次员处理')
+    shortageVisible.value = false
+    await revealNext()
+    window.__wmsRefreshBadge?.()
+  } finally {
+    saving.value = false
+  }
 }
 
 /* ------------------------------ 结单 ------------------------------ */
 
-async function onFinish() {
-  await ElMessageBox.confirm(
-    `确认结单？本任务共 ${task.value.itemCount} 行，实拣 ${task.value.actualQty} 件，缺货 ${task.value.shortageQty} 件。结单后波次将进入复核环节。`,
-    '完成拣货',
-    { type: 'warning', confirmButtonText: '确认结单' }
-  )
-  await pickApi.finish(task.value.taskNo)
-  ElMessage.success('拣货任务已结单，等待复核')
-  await load()
-  window.__wmsRefreshBadge?.()
+async function startTask() {
+  if (saving.value) return
+  saving.value = true
+  try {
+    task.value = await pickApi.start(task.value.taskNo)
+    await revealNext()
+    window.__wmsRefreshBadge?.()
+  } finally {
+    saving.value = false
+  }
 }
 
-watch(taskNo, load)
+async function onFinish() {
+  if (saving.value) return
+  saving.value = true
+  try {
+    await ElMessageBox.confirm(
+      `确认结单？本任务共 ${task.value.itemCount} 行，实拣 ${task.value.actualQty} 件，缺货 ${task.value.shortageQty} 件。结单后波次将进入复核环节。`,
+      '完成拣货',
+      { type: 'warning', confirmButtonText: '确认结单' }
+    )
+    task.value = await pickApi.finish(task.value.taskNo)
+    ElMessage.success('拣货任务已结单，等待复核')
+    await revealNext()
+    window.__wmsRefreshBadge?.()
+  } finally {
+    saving.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -373,8 +396,8 @@ onMounted(load)
 }
 
 .panel-sub {
-  font-size: 11.5px;
-  color: $text-placeholder;
+  font-size: 12px;
+  color: $text-secondary;
 }
 
 /* 概览 */
@@ -445,70 +468,60 @@ onMounted(load)
   word-break: break-all;
 }
 
-/* 序号徽标 */
-.seq-badge {
-  width: 24px;
-  height: 24px;
-  margin: 0 auto;
-  border-radius: 50%;
-  display: flex;
+.pick-panel { flex: 1 0 300px; min-height: 0; }
+.pick-list {
+  container-type: inline-size;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid $border-base;
+
+  ol { list-style: none; margin: 0; padding: 0; }
+}
+.pick-columns, .pick-line {
+  display: grid;
+  grid-template-columns: 128px minmax(130px, 1fr) 78px 65px 100px 175px;
   align-items: center;
-  justify-content: center;
+  gap: 10px;
+  padding: 10px 16px;
+}
+.pick-columns {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: $text-secondary;
   font-size: 12px;
   font-weight: 600;
-  background: #f1f5f9;
-  color: $text-secondary;
-  border: 1px solid $border-base;
-
-  &.done {
-    background: #f0fdf4;
-    color: $color-success;
-    border-color: #bbf7d0;
-  }
-
-  &.current {
-    background: $color-primary;
-    color: #fff;
-    border-color: $color-primary;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
-  }
 }
+.pick-line {
+  border-bottom: 1px solid $border-base;
+  font-size: 13px;
 
-.loc {
-  font-weight: 600;
-  color: #1d4ed8;
+  &.shortage { background: var(--wms-warning-soft); }
+  &.current { background: var(--wms-primary-soft); box-shadow: inset 3px 0 $color-primary; }
+  &.current .location, &.current .quantity b { color: $color-primary-dark; }
 }
-
-.should-qty {
-  font-size: 15px;
-  font-weight: 700;
-  color: $text-primary;
+.location { display: flex; gap: 8px; align-items: center; }
+.location small { color: $text-secondary; }
+.product { min-width: 0; overflow-wrap: anywhere; }
+.product summary { cursor: pointer; font-weight: 600; }
+.product div { font-size: 12px; color: $text-secondary; margin-top: 4px; }
+.quantity b { font-size: 18px; }
+.quantity small { display: none; }
+.item-status { display: flex; gap: 4px; align-items: flex-start; flex-direction: column; }
+.item-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.item-actions .el-button { margin: 0; }
+@container (max-width: 800px) {
+  .pick-columns { display: none; }
+  .pick-line { grid-template-columns: 1fr 1fr; padding: 12px; gap: 8px; }
+  .quantity small { display: inline; color: $text-secondary; }
+  .item-actions { justify-content: flex-end; }
 }
-
-.unit {
-  font-size: 11px;
-  color: $text-placeholder;
-  margin-left: 2px;
-}
-
-.small {
-  font-size: 11.5px;
-}
-
-:deep(.row-current) {
-  background: #eff6ff !important;
-
-  td {
-    background: #eff6ff !important;
-  }
-}
-
-:deep(.row-warn) {
-  background: #fffbf5 !important;
-
-  td {
-    background: #fffbf5 !important;
-  }
+@media (max-width: 700px) {
+  .path-text { display: block; }
+  .mini-stat { padding: 8px; }
+  .panel-head { flex-wrap: wrap; }
 }
 
 /* 对话框内容 */

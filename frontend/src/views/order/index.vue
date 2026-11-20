@@ -1,22 +1,22 @@
 <template>
-  <div class="page-container">
+  <div class="page-container work-table-page order-page">
     <PageHeader
       title="订单池"
       description="承接电商平台推送的订单。勾选订单汇聚入池后，即可在「波次管理」中批量生成拣货波次。"
       :count="total"
     >
       <template #actions>
-        <el-button type="primary" :icon="Promotion" :disabled="!selection.length" @click="onPoolSelected">
+        <el-button type="primary" :icon="Promotion" :disabled="!selection.length" :loading="pooling" @click="onPoolSelected">
           汇聚选中（{{ selection.length }}）
         </el-button>
-        <el-button :icon="Download" @click="onPoolAll">一键汇聚全部</el-button>
+        <el-button :icon="Download" :disabled="pooling" @click="onPoolAll">一键汇聚全部</el-button>
         <el-button :icon="Refresh" @click="load">刷新</el-button>
       </template>
     </PageHeader>
 
     <!-- ======================= 筛选区 ======================= -->
-    <div class="card card-pad mb-12">
-      <el-form :model="query" inline class="filter-form">
+    <div class="card card-pad mb-12 filter-card">
+      <el-form :model="query" inline class="filter-form" :class="{ expanded: moreFilters }">
         <el-form-item label="订单号 / 收货人">
           <el-input v-model="query.orderNo" placeholder="支持订单号或收货人" clearable style="width: 190px" @keyup.enter="search" />
         </el-form-item>
@@ -25,22 +25,25 @@
             <el-option v-for="o in dict.options('orderStatus')" :key="o.code" :label="o.desc" :value="o.code" />
           </el-select>
         </el-form-item>
-        <el-form-item label="平台">
+        <el-form-item label="平台" class="extra-filter">
           <el-select v-model="query.platform" placeholder="全部" clearable style="width: 130px">
             <el-option v-for="o in dict.options('platform')" :key="o.code" :label="o.desc" :value="o.code" />
           </el-select>
         </el-form-item>
-        <el-form-item label="承运商">
+        <el-form-item label="承运商" class="extra-filter">
           <el-select v-model="query.carrierCode" placeholder="全部" clearable style="width: 140px">
             <el-option v-for="c in carriers" :key="c.carrierCode" :label="c.carrierName" :value="c.carrierCode" />
           </el-select>
         </el-form-item>
-        <el-form-item label="优先级">
+        <el-form-item label="优先级" class="extra-filter">
           <el-select v-model="query.priority" placeholder="全部" clearable style="width: 110px">
             <el-option v-for="o in dict.options('priority')" :key="o.code" :label="o.desc" :value="o.code" />
           </el-select>
         </el-form-item>
         <el-form-item>
+          <el-button class="filter-toggle" :aria-expanded="moreFilters" @click="moreFilters = !moreFilters">
+            {{ moreFilters ? '收起筛选' : '更多筛选' }}{{ !moreFilters && extraLabels.length ? ' · ' + extraLabels.join(' / ') : '' }}
+          </el-button>
           <el-button type="primary" :icon="Search" @click="search">查询</el-button>
           <el-button :icon="RefreshLeft" @click="reset">重置</el-button>
         </el-form-item>
@@ -48,107 +51,120 @@
     </div>
 
     <!-- ======================= 状态速览 ======================= -->
-    <el-row :gutter="12" class="mb-12">
-      <el-col v-for="s in statusTiles" :key="s.code" :xs="12" :sm="8" :md="4" :lg="3">
-        <div class="tile" :class="{ active: query.status === s.code }" @click="quickFilter(s.code)">
-          <div class="tile-num num">{{ s.count }}</div>
-          <div class="tile-lbl">{{ s.desc }}</div>
-        </div>
-      </el-col>
-    </el-row>
+    <div class="status-strip mb-12" role="group" aria-label="订单状态筛选">
+      <button
+        v-for="s in statusTiles"
+        :key="s.code"
+        type="button"
+        class="tile"
+        :aria-pressed="query.status === s.code"
+        @click="quickFilter(s.code)"
+      >
+        <span class="tile-lbl">{{ s.desc }}</span>
+        <span class="tile-num num">{{ s.count }}</span>
+      </button>
+    </div>
 
     <!-- ======================= 表格 ======================= -->
-    <div class="card">
-      <el-table
-        v-loading="loading"
-        :data="rows"
-        row-key="orderNo"
-        stripe
-        height="calc(100vh - 452px)"
-        @selection-change="(v) => (selection = v)"
-      >
-        <el-table-column type="selection" width="46" :selectable="(r) => r.poolable" />
-        <el-table-column label="订单号" width="170" fixed>
-          <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="openDetail(row)">
-              <span class="mono">{{ row.orderNo }}</span>
-            </el-link>
+    <div class="card work-table-panel">
+      <div class="work-table-slot">
+        <el-table
+          v-loading="loading"
+          ref="table" :data="rows" @scroll="rememberScroll" empty-text="没有符合当前条件的记录"
+          row-key="orderNo"
+          stripe
+          height="100%"
+          @selection-change="(v) => (selection = v)"
+        >
+          <el-table-column type="selection" width="46" :selectable="(r) => r.poolable" />
+          <el-table-column label="订单号" width="170" fixed>
+            <template #default="{ row }">
+              <el-link type="primary" underline="never" @click="openDetail(row)">
+                <span class="mono order-no">{{ row.orderNo }}</span>
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column prop="platform" label="平台" width="90" />
+          <el-table-column label="状态" width="112">
+            <template #default="{ row }">
+              <StatusTag :code="row.status" group="orderStatus" />
+            </template>
+          </el-table-column>
+          <el-table-column label="优先级" width="78">
+            <template #default="{ row }">
+              <el-tag v-if="row.priority === 'URGENT'" type="danger" size="small" effect="dark">加急</el-tag>
+              <span v-else class="text-secondary">普通</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="收货信息" min-width="200">
+            <template #default="{ row }">
+              <div class="receiver">
+                <span class="rcv-name">{{ row.receiverName }}</span>
+                <span class="rcv-phone">{{ row.receiverPhone }}</span>
+              </div>
+              <div class="rcv-addr ellipsis">{{ row.province }} {{ row.city }} {{ row.receiverAddress }}</div>
+            </template>
+          </el-table-column>
+          <el-table-column label="承运商" width="105">
+            <template #default="{ row }">{{ row.carrierName }}</template>
+          </el-table-column>
+          <el-table-column label="SKU / 件数" width="105" align="center">
+            <template #default="{ row }">
+              <span class="num">{{ row.skuCount }}</span>
+              <span class="text-secondary"> / </span>
+              <span class="num">{{ row.totalQty }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="金额" width="100" align="right">
+            <template #default="{ row }">
+              <span class="num">{{ formatMoney(row.amount) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="归属波次" width="150">
+            <template #default="{ row }">
+              <el-link v-if="row.waveNo" type="primary" underline="never" @click="gotoWave(row.waveNo)">
+                <span class="mono">{{ row.waveNo }}</span>
+              </el-link>
+              <span v-else class="text-secondary">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="支付时间" width="150">
+            <template #default="{ row }">
+              <span class="text-secondary">{{ formatTimeShort(row.payTime) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
+              <el-button
+                v-if="row.poolable"
+                link
+                type="danger"
+                size="small"
+                @click="onCancel(row)"
+              >
+                取消
+              </el-button>
+            </template>
+          </el-table-column>
+          <template v-if="loadError" #empty>
+            <span role="alert">{{ loadError }}</span>
+            <el-button link type="primary" @click="load">重新加载</el-button>
           </template>
-        </el-table-column>
-        <el-table-column prop="platform" label="平台" width="90" />
-        <el-table-column label="状态" width="112">
-          <template #default="{ row }">
-            <StatusTag :code="row.status" group="orderStatus" />
-          </template>
-        </el-table-column>
-        <el-table-column label="优先级" width="78">
-          <template #default="{ row }">
-            <el-tag v-if="row.priority === 'URGENT'" type="danger" size="small" effect="dark">加急</el-tag>
-            <span v-else class="text-secondary">普通</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="收货信息" min-width="200">
-          <template #default="{ row }">
-            <div class="receiver">
-              <span class="rcv-name">{{ row.receiverName }}</span>
-              <span class="rcv-phone">{{ row.receiverPhone }}</span>
-            </div>
-            <div class="rcv-addr ellipsis">{{ row.province }} {{ row.city }} {{ row.receiverAddress }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="承运商" width="105">
-          <template #default="{ row }">{{ row.carrierName }}</template>
-        </el-table-column>
-        <el-table-column label="SKU / 件数" width="105" align="center">
-          <template #default="{ row }">
-            <span class="num">{{ row.skuCount }}</span>
-            <span class="text-secondary"> / </span>
-            <span class="num">{{ row.totalQty }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="金额" width="100" align="right">
-          <template #default="{ row }">
-            <span class="num">{{ formatMoney(row.amount) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="归属波次" width="150">
-          <template #default="{ row }">
-            <el-link v-if="row.waveNo" type="primary" :underline="false" @click="gotoWave(row.waveNo)">
-              <span class="mono">{{ row.waveNo }}</span>
-            </el-link>
-            <span v-else class="text-secondary">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="支付时间" width="150">
-          <template #default="{ row }">
-            <span class="text-secondary">{{ formatTimeShort(row.payTime) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
-            <el-button
-              v-if="row.poolable"
-              link
-              type="danger"
-              size="small"
-              @click="onCancel(row)"
-            >
-              取消
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        </el-table>
+      </div>
 
-      <el-pagination
-        v-model:current-page="query.pageNum"
-        v-model:page-size="query.pageSize"
-        :total="total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="load"
-        @current-change="load"
-      />
+      <div class="order-pager">
+        <el-pagination
+          v-model:current-page="query.pageNum"
+          v-model:page-size="query.pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="load"
+          @current-change="load"
+        />
+      </div>
     </div>
 
     <!-- ======================= 订单详情抽屉 ======================= -->
@@ -236,6 +252,7 @@
 </template>
 
 <script setup>
+import { useWorkList } from '@/composables/useWorkList'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -249,14 +266,12 @@ import { formatTime, formatTimeShort, formatMoney } from '@/utils'
 const router = useRouter()
 const dict = useDictStore()
 
-const loading = ref(false)
-const rows = ref([])
-const total = ref(0)
 const selection = ref([])
+const pooling = ref(false)
 const carriers = ref([])
 const counts = ref({})
 
-const query = ref({
+const { query, rows, total, loading, loadError, table, rememberScroll, load } = useWorkList({
   pageNum: 1,
   pageSize: 20,
   orderNo: '',
@@ -264,7 +279,14 @@ const query = ref({
   platform: '',
   carrierCode: '',
   priority: ''
-})
+}, orderApi.page)
+
+const moreFilters = ref(false)
+const extraLabels = computed(() => [
+  query.value.platform && dict.text('platform', query.value.platform),
+  query.value.carrierCode && (carriers.value.find(c => c.carrierCode === query.value.carrierCode)?.carrierName || query.value.carrierCode),
+  query.value.priority && dict.text('priority', query.value.priority)
+].filter(Boolean))
 
 const detailVisible = ref(false)
 const detail = ref(null)
@@ -281,17 +303,6 @@ const statusTiles = computed(() =>
 )
 
 /* ------------------------------ 加载 ------------------------------ */
-
-async function load() {
-  loading.value = true
-  try {
-    const res = await orderApi.page(query.value)
-    rows.value = res.records
-    total.value = res.total
-  } finally {
-    loading.value = false
-  }
-}
 
 async function loadCounts() {
   counts.value = await orderApi.countByStatus()
@@ -324,24 +335,36 @@ function quickFilter(code) {
 /* ------------------------------ 操作 ------------------------------ */
 
 async function onPoolSelected() {
-  const nos = selection.value.map((r) => r.orderNo)
-  const res = await orderApi.pool(nos)
-  ElMessage.success(`已汇聚 ${res} 笔订单，可在「波次管理」生成波次`)
-  selection.value = []
-  await Promise.all([load(), loadCounts()])
-  window.__wmsRefreshBadge?.()
+  if (pooling.value) return
+  pooling.value = true
+  try {
+    const nos = selection.value.map((r) => r.orderNo)
+    const res = await orderApi.pool(nos)
+    ElMessage.success(`已汇聚 ${res} 笔订单，可在「波次管理」生成波次`)
+    selection.value = []
+    await Promise.all([load(), loadCounts()])
+    window.__wmsRefreshBadge?.()
+  } finally {
+    pooling.value = false
+  }
 }
 
 async function onPoolAll() {
-  await ElMessageBox.confirm(
-    '将把所有「新建待汇聚」的订单一次性汇聚入池，是否继续？',
-    '一键汇聚',
-    { type: 'warning', confirmButtonText: '确定汇聚' }
-  )
-  const res = await orderApi.poolAll()
-  ElMessage.success(`已汇聚 ${res} 笔订单`)
-  await Promise.all([load(), loadCounts()])
-  window.__wmsRefreshBadge?.()
+  if (pooling.value) return
+  pooling.value = true
+  try {
+    await ElMessageBox.confirm(
+      '将把所有「新建待汇聚」的订单一次性汇聚入池，是否继续？',
+      '一键汇聚',
+      { type: 'warning', confirmButtonText: '确定汇聚' }
+    )
+    const res = await orderApi.poolAll()
+    ElMessage.success(`已汇聚 ${res} 笔订单`)
+    await Promise.all([load(), loadCounts()])
+    window.__wmsRefreshBadge?.()
+  } finally {
+    pooling.value = false
+  }
 }
 
 async function onCancel(row) {
@@ -382,62 +405,104 @@ function traceType(bizType) {
 }
 
 onMounted(async () => {
-  carriers.value = await baseApi.carriers()
-  await Promise.all([load(), loadCounts()])
+  await Promise.allSettled([
+    load(), loadCounts(),
+    baseApi.carriers().then(result => { carriers.value = result })
+  ])
 })
 </script>
 
 <style scoped lang="scss">
+.order-page {
+  container-type: inline-size;
+}
+
+.filter-card {
+  padding-block: 10px;
+}
+
 .filter-form {
   display: flex;
   flex-wrap: wrap;
-  gap: 0;
+  align-items: center;
+  gap: 8px 14px;
 
   :deep(.el-form-item) {
-    margin-bottom: 6px;
-    margin-right: 16px;
+    margin: 0;
   }
 }
 
-/* 状态速览块 */
+.filter-toggle {
+  display: none;
+}
+
+.filter-toggle + .el-button {
+  margin-left: 0;
+}
+
+@container (max-width: 1280px) {
+  .filter-form:not(.expanded) .extra-filter {
+    display: none;
+  }
+
+  .filter-toggle {
+    display: inline-flex;
+    margin-right: 10px;
+  }
+}
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .tile {
-  padding: 11px 14px;
-  border-radius: 9px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 12px;
+  font: inherit;
+  color: $text-regular;
   background: #fff;
   border: 1px solid $border-base;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.16s;
 
-  &:hover {
-    border-color: #bfdbfe;
-    background: #f8fbff;
+  &:hover,
+  &[aria-pressed='true'] {
+    border-color: #93c5fd;
+    color: $color-primary-dark;
+    background: var(--wms-primary-soft);
   }
 
-  &.active {
+  &[aria-pressed='true'] {
     border-color: $color-primary;
-    background: #eff6ff;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
-
-    .tile-num {
-      color: $color-primary;
-    }
   }
-}
-
-.tile-num {
-  font-size: 20px;
-  font-weight: 700;
-  color: $text-primary;
-  line-height: 1.15;
 }
 
 .tile-lbl {
-  font-size: 11.5px;
-  color: $text-secondary;
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.tile-num {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.order-pager {
+  padding: 8px 12px;
+  overflow-x: auto;
+  border-top: 1px solid $border-base;
+
+  :deep(.el-pagination) {
+    width: max-content;
+    margin: 0 0 0 auto;
+  }
+}
+
+.order-no {
+  font-weight: 600;
 }
 
 /* 收货信息两行 */
@@ -448,13 +513,13 @@ onMounted(async () => {
 }
 
 .rcv-name {
-  font-weight: 500;
+  font-weight: 600;
   color: $text-primary;
 }
 
 .rcv-phone {
   font-size: 12px;
-  color: $text-placeholder;
+  color: $text-secondary;
 }
 
 .rcv-addr {

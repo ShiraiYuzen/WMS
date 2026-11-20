@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container work-table-page">
     <PageHeader
       title="波次管理"
       description="按策略把订单池中的订单聚类成波次，分配拣货员后下发拣货。波次内同库位同 SKU 会自动合并，拣货员只跑一趟。"
@@ -79,98 +79,104 @@
     </div>
 
     <!-- ======================= 表格 ======================= -->
-    <div class="card">
-      <el-table v-loading="loading" :data="rows" stripe height="calc(100vh - 486px)">
-        <el-table-column label="波次号" width="165" fixed>
-          <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="gotoDetail(row)">
-              <span class="mono">{{ row.waveNo }}</span>
-            </el-link>
+    <div class="card work-table-panel">
+      <div class="work-table-slot">
+        <el-table v-loading="loading" ref="table" :data="rows" @scroll="rememberScroll" empty-text="没有符合当前条件的记录" stripe height="100%">
+          <el-table-column label="波次号" width="165" fixed>
+            <template #default="{ row }">
+              <el-link type="primary" underline="never" @click="gotoDetail(row)">
+                <span class="mono">{{ row.waveNo }}</span>
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column prop="waveName" label="波次名称" min-width="190" show-overflow-tooltip />
+          <el-table-column label="状态" width="120">
+            <template #default="{ row }">
+              <StatusTag :code="row.status" group="waveStatus" />
+              <el-icon v-if="row.hasShortage" class="shortage-flag" title="含缺货">
+                <WarningFilled />
+              </el-icon>
+            </template>
+          </el-table-column>
+          <el-table-column label="流程进度" width="150">
+            <template #default="{ row }">
+              <el-progress
+                :percentage="row.progress"
+                :stroke-width="7"
+                :color="progressColor(row.progress)"
+                :show-text="false"
+              />
+              <div class="progress-lbl">{{ row.currentNode }} · {{ row.progress }}%</div>
+            </template>
+          </el-table-column>
+          <el-table-column label="策略" width="140">
+            <template #default="{ row }">
+              <span class="text-secondary">{{ row.strategyDesc }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="订单 / SKU / 件数" width="150" align="center">
+            <template #default="{ row }">
+              <span class="num">{{ row.orderCount }}</span>
+              <span class="text-secondary"> / </span>
+              <span class="num">{{ row.skuCount }}</span>
+              <span class="text-secondary"> / </span>
+              <span class="num">{{ row.totalQty }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="拣货员" width="100">
+            <template #default="{ row }">
+              <span v-if="row.pickerName">{{ row.pickerName }}</span>
+              <el-tag v-else type="warning" size="small" effect="plain">待分配</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="拣货耗时" width="105" align="right">
+            <template #default="{ row }">
+              <span class="num">{{ formatDuration(row.pickDurationSec) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="生成时间" width="150">
+            <template #default="{ row }">
+              <span class="text-secondary">{{ formatTimeShort(row.createTime) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="200" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="gotoDetail(row)">详情</el-button>
+              <el-button
+                v-if="['CREATED', 'ASSIGNED'].includes(row.status)"
+                link
+                type="primary"
+                size="small"
+                @click="openAssign(row)"
+              >
+                {{ row.pickerName ? '改派' : '派工' }}
+              </el-button>
+              <el-button
+                v-if="['CREATED', 'ASSIGNED'].includes(row.status)"
+                link
+                type="danger"
+                size="small"
+                @click="onCancel(row)"
+              >
+                取消
+              </el-button>
+              <el-button
+                v-if="row.status === 'HANDOVERED'"
+                link
+                type="success"
+                size="small"
+                @click="onClose(row)"
+              >
+                归档
+              </el-button>
+            </template>
+          </el-table-column>
+          <template v-if="loadError" #empty>
+            <span role="alert">{{ loadError }}</span>
+            <el-button link type="primary" @click="load">重新加载</el-button>
           </template>
-        </el-table-column>
-        <el-table-column prop="waveName" label="波次名称" min-width="190" show-overflow-tooltip />
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">
-            <StatusTag :code="row.status" group="waveStatus" />
-            <el-icon v-if="row.hasShortage" class="shortage-flag" title="含缺货">
-              <WarningFilled />
-            </el-icon>
-          </template>
-        </el-table-column>
-        <el-table-column label="流程进度" width="150">
-          <template #default="{ row }">
-            <el-progress
-              :percentage="row.progress"
-              :stroke-width="7"
-              :color="progressColor(row.progress)"
-              :show-text="false"
-            />
-            <div class="progress-lbl">{{ row.currentNode }} · {{ row.progress }}%</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="策略" width="140">
-          <template #default="{ row }">
-            <span class="text-secondary">{{ row.strategyDesc }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="订单 / SKU / 件数" width="150" align="center">
-          <template #default="{ row }">
-            <span class="num">{{ row.orderCount }}</span>
-            <span class="text-secondary"> / </span>
-            <span class="num">{{ row.skuCount }}</span>
-            <span class="text-secondary"> / </span>
-            <span class="num">{{ row.totalQty }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="拣货员" width="100">
-          <template #default="{ row }">
-            <span v-if="row.pickerName">{{ row.pickerName }}</span>
-            <el-tag v-else type="warning" size="small" effect="plain">待分配</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="拣货耗时" width="105" align="right">
-          <template #default="{ row }">
-            <span class="num">{{ formatDuration(row.pickDurationSec) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="生成时间" width="150">
-          <template #default="{ row }">
-            <span class="text-secondary">{{ formatTimeShort(row.createTime) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="gotoDetail(row)">详情</el-button>
-            <el-button
-              v-if="['CREATED', 'ASSIGNED'].includes(row.status)"
-              link
-              type="primary"
-              size="small"
-              @click="openAssign(row)"
-            >
-              {{ row.pickerName ? '改派' : '派工' }}
-            </el-button>
-            <el-button
-              v-if="['CREATED', 'ASSIGNED'].includes(row.status)"
-              link
-              type="danger"
-              size="small"
-              @click="onCancel(row)"
-            >
-              取消
-            </el-button>
-            <el-button
-              v-if="row.status === 'HANDOVERED'"
-              link
-              type="success"
-              size="small"
-              @click="onClose(row)"
-            >
-              归档
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        </el-table>
+      </div>
 
       <el-pagination
         v-model:current-page="query.pageNum"
@@ -325,6 +331,7 @@
 </template>
 
 <script setup>
+import { useWorkList } from '@/composables/useWorkList'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -342,14 +349,11 @@ const router = useRouter()
 const dict = useDictStore()
 const app = useAppStore()
 
-const loading = ref(false)
-const rows = ref([])
-const total = ref(0)
 const workload = ref([])
 const pickers = ref([])
 const pooledCount = ref(0)
 
-const query = ref({
+const { query, rows, total, loading, loadError, table, rememberScroll, load } = useWorkList({
   pageNum: 1,
   pageSize: 20,
   waveNo: '',
@@ -358,7 +362,7 @@ const query = ref({
   pickerNo: '',
   onlyWorking: false,
   onlyShortage: false
-})
+}, waveApi.page)
 
 /* ------------------------------ 生成向导 ------------------------------ */
 
@@ -443,17 +447,6 @@ async function doAssign() {
 
 /* ------------------------------ 列表 ------------------------------ */
 
-async function load() {
-  loading.value = true
-  try {
-    const res = await waveApi.page(query.value)
-    rows.value = res.records
-    total.value = res.total
-  } finally {
-    loading.value = false
-  }
-}
-
 async function refreshAll() {
   await Promise.all([load(), loadWorkload(), loadPooledCount()])
 }
@@ -516,8 +509,10 @@ function progressColor(p) {
 }
 
 onMounted(async () => {
-  pickers.value = await baseApi.employeesByRole('PICKER')
-  await refreshAll()
+  await Promise.allSettled([
+    refreshAll(),
+    baseApi.employeesByRole('PICKER').then(result => { pickers.value = result })
+  ])
 })
 </script>
 

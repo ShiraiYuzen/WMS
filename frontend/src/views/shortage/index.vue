@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container work-table-page">
     <PageHeader
       title="缺货处理"
       description="拣货员在库位上报缺货后进入本页。波次员按「待处理优先」排序逐条决策：拆单出库 / 取消明细 / 替代商品 / 等待补货 / 整单取消，处理后归档留痕。"
@@ -66,94 +66,100 @@
     </div>
 
     <!-- ======================= 表格 ======================= -->
-    <div class="card">
-      <el-table
-        v-loading="loading"
-        :data="rows"
-        stripe
-        height="calc(100vh - 596px)"
-        :row-class-name="rowClass"
-      >
-        <el-table-column label="缺货单号" width="170" fixed>
-          <template #default="{ row }"><span class="mono">{{ row.shortageNo }}</span></template>
-        </el-table-column>
-        <el-table-column label="状态" width="130">
-          <template #default="{ row }">
-            <StatusTag :code="row.status" group="shortageStatus" />
+    <div class="card work-table-panel">
+      <div class="work-table-slot">
+        <el-table
+          v-loading="loading"
+          ref="table" :data="rows" @scroll="rememberScroll" empty-text="没有符合当前条件的记录"
+          stripe
+          height="100%"
+          :row-class-name="rowClass"
+        >
+          <el-table-column label="缺货单号" width="170" fixed>
+            <template #default="{ row }"><span class="mono">{{ row.shortageNo }}</span></template>
+          </el-table-column>
+          <el-table-column label="状态" width="130">
+            <template #default="{ row }">
+              <StatusTag :code="row.status" group="shortageStatus" />
+            </template>
+          </el-table-column>
+          <el-table-column label="商品" min-width="200">
+            <template #default="{ row }">
+              <div class="sku-cell">
+                <span class="sku-name">{{ row.skuName }}</span>
+                <span class="sku-code mono">{{ row.skuCode }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="缺货" width="80" align="right">
+            <template #default="{ row }"><span class="num text-danger">{{ row.shortageQty }}</span></template>
+          </el-table-column>
+          <el-table-column label="应拣" width="80" align="right">
+            <template #default="{ row }"><span class="num">{{ row.shouldQty }}</span></template>
+          </el-table-column>
+          <el-table-column label="波次号" width="165">
+            <template #default="{ row }">
+              <el-link type="primary" underline="never" @click="gotoWave(row.waveNo)">
+                <span class="mono">{{ row.waveNo }}</span>
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="订单号" width="165">
+            <template #default="{ row }"><span class="mono">{{ row.orderNo || '—' }}</span></template>
+          </el-table-column>
+          <el-table-column label="库位" width="120">
+            <template #default="{ row }"><span class="mono">{{ row.locationCode }}</span></template>
+          </el-table-column>
+          <el-table-column label="缺货原因" width="140">
+            <template #default="{ row }">
+              <el-tag size="small" effect="plain" type="warning">{{ dict.text('shortageReason', row.reason) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="处理方式" width="130">
+            <template #default="{ row }">
+              <span v-if="row.handleType" class="handle-type">
+                {{ dict.text('shortageHandleType', row.handleType) }}
+              </span>
+              <span v-else class="text-secondary">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="上报人 / 时间" width="170">
+            <template #default="{ row }">
+              <div class="two-line">
+                <span>{{ row.reporterName || '—' }}</span>
+                <span class="text-secondary">{{ formatTimeShort(row.reportTime) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="160" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.status === 'PENDING'"
+                link
+                type="primary"
+                size="small"
+                @click="openHandle(row)"
+              >
+                处理
+              </el-button>
+              <el-button
+                v-if="row.status === 'HANDLED'"
+                link
+                type="success"
+                size="small"
+                @click="onClose(row)"
+              >
+                归档
+              </el-button>
+              <el-button link size="small" @click="openDetail(row)">详情</el-button>
+            </template>
+          </el-table-column>
+          <template v-if="loadError" #empty>
+            <span role="alert">{{ loadError }}</span>
+            <el-button link type="primary" @click="load">重新加载</el-button>
           </template>
-        </el-table-column>
-        <el-table-column label="波次号" width="165">
-          <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="gotoWave(row.waveNo)">
-              <span class="mono">{{ row.waveNo }}</span>
-            </el-link>
-          </template>
-        </el-table-column>
-        <el-table-column label="订单号" width="165">
-          <template #default="{ row }"><span class="mono">{{ row.orderNo || '—' }}</span></template>
-        </el-table-column>
-        <el-table-column label="库位" width="120">
-          <template #default="{ row }"><span class="mono">{{ row.locationCode }}</span></template>
-        </el-table-column>
-        <el-table-column label="商品" min-width="200">
-          <template #default="{ row }">
-            <div class="sku-cell">
-              <span class="sku-name">{{ row.skuName }}</span>
-              <span class="sku-code mono">{{ row.skuCode }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="应拣" width="80" align="right">
-          <template #default="{ row }"><span class="num">{{ row.shouldQty }}</span></template>
-        </el-table-column>
-        <el-table-column label="缺货" width="80" align="right">
-          <template #default="{ row }"><span class="num text-danger">{{ row.shortageQty }}</span></template>
-        </el-table-column>
-        <el-table-column label="缺货原因" width="140">
-          <template #default="{ row }">
-            <el-tag size="small" effect="plain" type="warning">{{ dict.text('shortageReason', row.reason) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="处理方式" width="130">
-          <template #default="{ row }">
-            <span v-if="row.handleType" class="handle-type">
-              {{ dict.text('shortageHandleType', row.handleType) }}
-            </span>
-            <span v-else class="text-secondary">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="上报人 / 时间" width="170">
-          <template #default="{ row }">
-            <div class="two-line">
-              <span>{{ row.reporterName || '—' }}</span>
-              <span class="text-secondary">{{ formatTimeShort(row.reportTime) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              v-if="row.status === 'PENDING'"
-              link
-              type="primary"
-              size="small"
-              @click="openHandle(row)"
-            >
-              处理
-            </el-button>
-            <el-button
-              v-if="row.status === 'HANDLED'"
-              link
-              type="success"
-              size="small"
-              @click="onClose(row)"
-            >
-              归档
-            </el-button>
-            <el-button link size="small" @click="openDetail(row)">详情</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        </el-table>
+      </div>
 
       <el-pagination
         v-model:current-page="query.pageNum"
@@ -171,6 +177,9 @@
       <div v-if="current" class="handle-info">
         <div class="hi-row">
           <span class="hi-label">缺货单号</span><span class="mono">{{ current.shortageNo }}</span>
+        </div>
+        <div class="hi-row">
+          <span class="hi-label">关联订单</span><b class="mono">{{ current.orderNo || '—' }}</b>
         </div>
         <div class="hi-row">
           <span class="hi-label">商品</span>
@@ -292,6 +301,7 @@
 </template>
 
 <script setup>
+import { useWorkList } from '@/composables/useWorkList'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -308,14 +318,11 @@ const router = useRouter()
 const dict = useDictStore()
 const app = useAppStore()
 
-const loading = ref(false)
-const rows = ref([])
-const total = ref(0)
 const pendingCount = ref(0)
 const distList = ref([])
 const skus = ref([])
 
-const query = ref({
+const { query, rows, total, loading, loadError, table, rememberScroll, load } = useWorkList({
   pageNum: 1,
   pageSize: 20,
   shortageNo: '',
@@ -323,7 +330,7 @@ const query = ref({
   skuCode: '',
   reason: '',
   status: ''
-})
+}, shortageApi.page)
 
 /* ------------------------------ 处理表单 ------------------------------ */
 
@@ -379,17 +386,6 @@ const distOption = computed(() => ({
 
 /* ------------------------------ 数据加载 ------------------------------ */
 
-async function load() {
-  loading.value = true
-  try {
-    const res = await shortageApi.page(query.value)
-    rows.value = res.records
-    total.value = res.total
-  } finally {
-    loading.value = false
-  }
-}
-
 async function loadStats() {
   const [pending, dist] = await Promise.all([
     shortageApi.pendingCount(),
@@ -444,6 +440,7 @@ function openDetail(row) {
 
 async function submitHandle() {
   await formRef.value.validate()
+  if (submitting.value) return
   submitting.value = true
   try {
     await shortageApi.handle({
@@ -480,8 +477,10 @@ function gotoWave(waveNo) {
 }
 
 onMounted(async () => {
-  skus.value = (await baseApi.skuPage({ pageNum: 1, pageSize: 500 })).records
-  await refreshAll()
+  await Promise.allSettled([
+    refreshAll(),
+    baseApi.skuPage({ pageNum: 1, pageSize: 500 }).then(result => { skus.value = result.records })
+  ])
 })
 </script>
 
@@ -691,5 +690,9 @@ onMounted(async () => {
   float: right;
   font-size: 11px;
   color: $text-placeholder;
+}
+@media (max-width: 850px) {
+  .overview-row, .handle-info { grid-template-columns: minmax(0, 1fr); }
+  .hi-row { flex-wrap: wrap; }
 }
 </style>

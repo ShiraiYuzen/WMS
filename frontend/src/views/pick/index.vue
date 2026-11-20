@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container work-table-page">
     <PageHeader
       title="拣货任务"
       description="波次下发后自动生成拣货任务。明细已按库位路径排序，拣货员按顺序逐行扫码确认即可，同库位同 SKU 已合并。"
@@ -62,84 +62,90 @@
     </div>
 
     <!-- ======================= 表格 ======================= -->
-    <div class="card">
-      <el-table v-loading="loading" :data="rows" stripe height="calc(100vh - 528px)">
-        <el-table-column label="任务号" width="165" fixed>
-          <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="gotoExecute(row)">
-              <span class="mono">{{ row.taskNo }}</span>
-            </el-link>
+    <div class="card work-table-panel">
+      <div class="work-table-slot">
+        <el-table v-loading="loading" ref="table" :data="rows" @scroll="rememberScroll" empty-text="没有符合当前条件的记录" stripe height="100%">
+          <el-table-column label="任务号" width="165" fixed>
+            <template #default="{ row }">
+              <el-link type="primary" underline="never" @click="gotoExecute(row)">
+                <span class="mono">{{ row.taskNo }}</span>
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="波次号" width="165">
+            <template #default="{ row }">
+              <el-link type="primary" underline="never" @click="gotoWave(row.waveNo)">
+                <span class="mono">{{ row.waveNo }}</span>
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="130">
+            <template #default="{ row }">
+              <StatusTag :code="row.status" group="pickTaskStatus" />
+            </template>
+          </el-table-column>
+          <el-table-column label="拣货进度" width="170">
+            <template #default="{ row }">
+              <el-progress :percentage="row.progress" :stroke-width="7" :show-text="false" />
+              <div class="progress-lbl">{{ row.finishedCount }} / {{ row.itemCount }} 行</div>
+            </template>
+          </el-table-column>
+          <el-table-column label="拣货员" width="100">
+            <template #default="{ row }">
+              <span v-if="row.pickerName">{{ row.pickerName }}</span>
+              <el-tag v-else type="warning" size="small" effect="plain">待分配</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="订单数" width="80" align="right">
+            <template #default="{ row }"><span class="num">{{ row.orderCount }}</span></template>
+          </el-table-column>
+          <el-table-column label="库位数" width="80" align="right">
+            <template #default="{ row }"><span class="num">{{ row.locationCount }}</span></template>
+          </el-table-column>
+          <el-table-column label="应拣/实拣/缺货" width="150" align="center">
+            <template #default="{ row }">
+              <span class="num">{{ row.shouldQty }}</span>
+              <span class="text-secondary"> / </span>
+              <span class="num success">{{ row.actualQty }}</span>
+              <span class="text-secondary"> / </span>
+              <span class="num" :class="{ danger: row.shortageQty > 0 }">{{ row.shortageQty }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="耗时" width="105" align="right">
+            <template #default="{ row }"><span class="num">{{ formatDuration(row.durationSec) }}</span></template>
+          </el-table-column>
+          <el-table-column label="开始时间" width="150">
+            <template #default="{ row }"><span class="text-secondary">{{ formatTimeShort(row.startTime) }}</span></template>
+          </el-table-column>
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.status === 'WAITING'"
+                link
+                type="primary"
+                size="small"
+                :loading="starting === row.taskNo" @click="onStart(row)"
+              >
+                领取开工
+              </el-button>
+              <el-button
+                v-if="!row.finishTime && ['PICKING', 'EXCEPTION'].includes(row.status)"
+                link
+                type="primary"
+                size="small"
+                @click="gotoExecute(row)"
+              >
+                继续拣货
+              </el-button>
+              <el-button link size="small" @click="showPath(row)">路线</el-button>
+            </template>
+          </el-table-column>
+          <template v-if="loadError" #empty>
+            <span role="alert">{{ loadError }}</span>
+            <el-button link type="primary" @click="load">重新加载</el-button>
           </template>
-        </el-table-column>
-        <el-table-column label="波次号" width="165">
-          <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="gotoWave(row.waveNo)">
-              <span class="mono">{{ row.waveNo }}</span>
-            </el-link>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="130">
-          <template #default="{ row }">
-            <StatusTag :code="row.status" group="pickTaskStatus" />
-          </template>
-        </el-table-column>
-        <el-table-column label="拣货进度" width="170">
-          <template #default="{ row }">
-            <el-progress :percentage="row.progress" :stroke-width="7" :show-text="false" />
-            <div class="progress-lbl">{{ row.finishedCount }} / {{ row.itemCount }} 行</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="拣货员" width="100">
-          <template #default="{ row }">
-            <span v-if="row.pickerName">{{ row.pickerName }}</span>
-            <el-tag v-else type="warning" size="small" effect="plain">待分配</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="订单数" width="80" align="right">
-          <template #default="{ row }"><span class="num">{{ row.orderCount }}</span></template>
-        </el-table-column>
-        <el-table-column label="库位数" width="80" align="right">
-          <template #default="{ row }"><span class="num">{{ row.locationCount }}</span></template>
-        </el-table-column>
-        <el-table-column label="应拣/实拣/缺货" width="150" align="center">
-          <template #default="{ row }">
-            <span class="num">{{ row.shouldQty }}</span>
-            <span class="text-secondary"> / </span>
-            <span class="num success">{{ row.actualQty }}</span>
-            <span class="text-secondary"> / </span>
-            <span class="num" :class="{ danger: row.shortageQty > 0 }">{{ row.shortageQty }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="耗时" width="105" align="right">
-          <template #default="{ row }"><span class="num">{{ formatDuration(row.durationSec) }}</span></template>
-        </el-table-column>
-        <el-table-column label="开始时间" width="150">
-          <template #default="{ row }"><span class="text-secondary">{{ formatTimeShort(row.startTime) }}</span></template>
-        </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              v-if="row.status === 'WAITING'"
-              link
-              type="primary"
-              size="small"
-              @click="onStart(row)"
-            >
-              领取开工
-            </el-button>
-            <el-button
-              v-if="['PICKING', 'EXCEPTION'].includes(row.status)"
-              link
-              type="primary"
-              size="small"
-              @click="gotoExecute(row)"
-            >
-              继续拣货
-            </el-button>
-            <el-button link size="small" @click="showPath(row)">路线</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        </el-table>
+      </div>
 
       <el-pagination
         v-model:current-page="query.pageNum"
@@ -170,6 +176,7 @@
 </template>
 
 <script setup>
+import { useWorkList } from '@/composables/useWorkList'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -185,20 +192,18 @@ const router = useRouter()
 const dict = useDictStore()
 const app = useAppStore()
 
-const loading = ref(false)
-const rows = ref([])
-const total = ref(0)
 const pickers = ref([])
 const myTasks = ref([])
+const starting = ref('')
 
-const query = ref({
+const { query, rows, total, loading, loadError, table, rememberScroll, load } = useWorkList({
   pageNum: 1,
   pageSize: 20,
   taskNo: '',
   waveNo: '',
   pickerNo: '',
   status: ''
-})
+}, pickApi.page)
 
 const pathVisible = ref(false)
 const pathTask = ref(null)
@@ -208,17 +213,6 @@ const pathLocations = computed(() => {
   if (!t) return []
   return [...new Set(t.items.map((i) => i.locationCode))]
 })
-
-async function load() {
-  loading.value = true
-  try {
-    const res = await pickApi.page(query.value)
-    rows.value = res.records
-    total.value = res.total
-  } finally {
-    loading.value = false
-  }
-}
 
 async function loadMyTasks() {
   try {
@@ -243,11 +237,17 @@ function reset() {
 }
 
 async function onStart(row) {
-  await pickApi.start(row.taskNo, row.pickerNo)
-  ElMessage.success('已开始拣货')
-  await refreshAll()
-  window.__wmsRefreshBadge?.()
-  gotoExecute(row)
+  if (starting.value) return
+  starting.value = row.taskNo
+  try {
+    await pickApi.start(row.taskNo, row.pickerNo)
+    ElMessage.success('已开始拣货')
+    await refreshAll()
+    window.__wmsRefreshBadge?.()
+    gotoExecute(row)
+  } finally {
+    starting.value = ''
+  }
 }
 
 function gotoExecute(row) {
@@ -264,8 +264,10 @@ async function showPath(row) {
 }
 
 onMounted(async () => {
-  pickers.value = await baseApi.employeesByRole('PICKER')
-  await refreshAll()
+  await Promise.allSettled([
+    refreshAll(),
+    baseApi.employeesByRole('PICKER').then(result => { pickers.value = result })
+  ])
 })
 </script>
 

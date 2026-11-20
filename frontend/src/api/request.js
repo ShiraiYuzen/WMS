@@ -76,6 +76,7 @@ service.interceptors.response.use(
     }
 
     ElMessage.error(message)
+    error.message = message
     return Promise.reject(error)
   }
 )

@@ -130,7 +130,7 @@ const routes = [
         path: 'base/carrier',
         name: 'BaseCarrier',
         component: () => import('@/views/base/carrier.vue'),
-        meta: { title: '承运商', icon: 'Truck', group: '复盘与配置' }
+        meta: { title: '承运商', icon: 'Van', group: '复盘与配置' }
       }
     ]
   },

@@ -32,12 +32,12 @@
                 <!-- 收起状态：标题（含计数）会被塞进 tooltip，这里补一个小红点 -->
                 <span
                   v-if="app.sidebarCollapsed && badgeOf(item.path)"
-                  class="menu-dot"
+                  class="menu-dot" :class="{ exception: item.path === '/shortage' }"
                   :title="`${item.title}：${badgeOf(item.path)} 项待处理`"
                 />
                 <template #title>
                   <span class="menu-text">{{ item.title }}</span>
-                  <span v-if="badgeOf(item.path)" class="menu-count">
+                  <span v-if="badgeOf(item.path)" class="menu-count" :class="{ exception: item.path === '/shortage' }">
                     {{ badgeOf(item.path) > 99 ? '99+' : badgeOf(item.path) }}
                   </span>
                 </template>
@@ -49,12 +49,12 @@
 
       <div class="sidebar-foot">
         <el-tooltip content="收起 / 展开菜单" placement="right">
-          <div class="collapse-btn" @click="app.toggleSidebar()">
+          <button type="button" class="collapse-btn" :aria-label="app.sidebarCollapsed ? '展开菜单' : '收起菜单'" :aria-expanded="!app.sidebarCollapsed" @click="app.toggleSidebar()">
             <el-icon>
               <component :is="app.sidebarCollapsed ? 'Expand' : 'Fold'" />
             </el-icon>
             <span v-show="!app.sidebarCollapsed">收起菜单</span>
-          </div>
+          </button>
         </el-tooltip>
       </div>
     </aside>
@@ -137,7 +137,7 @@
       <main class="content">
         <router-view v-slot="{ Component, route: r }">
           <transition name="fade-slide" mode="out-in">
-            <component :is="Component" :key="r.fullPath" />
+            <component :is="Component" :key="app.currentUser.employeeNo + r.fullPath" />
           </transition>
         </router-view>
       </main>
@@ -146,12 +146,14 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { listPositions } from '@/composables/useWorkList'
 import { useAppStore } from '@/stores/app'
 import { useDictStore } from '@/stores/dict'
 import { authApi, dashboardApi } from '@/api'
 
+provide(listPositions, new Map())
 const route = useRoute()
 const router = useRouter()
 const app = useAppStore()
@@ -273,7 +275,15 @@ async function onSwitchAccount(employeeNo) {
 
 /* ------------------------------ 初始化 ------------------------------ */
 
+const narrowScreen = window.matchMedia('(max-width: 1050px)')
+function fitSidebar() {
+  app.sidebarCollapsed = narrowScreen.matches
+}
+
+onBeforeUnmount(() => narrowScreen.removeEventListener('change', fitSidebar))
 onMounted(() => {
+  fitSidebar()
+  narrowScreen.addEventListener('change', fitSidebar)
   dict.load()
   refreshBadge()
   // 全局挂一个刷新函数，页面操作后可以调用以更新红点
@@ -413,21 +423,13 @@ onMounted(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #ef4444;
+  background: #475569;
+  &.exception { background: #dc2626; }
   box-shadow: 0 0 0 2px #16233c;
   pointer-events: none;
-  animation: dot-breathe 1.8s ease-in-out infinite;
+
 }
 
-@keyframes dot-breathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.55;
-  }
-}
 .menu-count {
   flex-shrink: 0;
   display: inline-flex;
@@ -438,7 +440,8 @@ onMounted(() => {
   padding: 0 6px;
   margin-left: 8px;
   border-radius: 9px;
-  background: #ef4444;
+  background: #475569;
+  &.exception { background: #dc2626; }
   color: #fff;
   font-size: 11px;
   font-weight: 600;
@@ -454,6 +457,9 @@ onMounted(() => {
 }
 
 .collapse-btn {
+  width: 100%;
+  background: transparent;
+  border: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -604,5 +610,15 @@ onMounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+@media (max-width: 700px) {
+  .header { padding-inline: 10px; }
+  .header-right { gap: 8px; }
+  .user-meta, .user-arrow { display: none; }
+  .sidebar:not(.collapsed) {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 20;
+  }
 }
 </style>

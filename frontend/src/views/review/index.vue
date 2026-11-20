@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container work-table-page">
     <PageHeader
       title="复核打包"
       description="拣货完成后波次进入复核。认领波次后逐单核对商品与数量，登记包装材料、包裹数与重量；发现差异时登记差异类型并判定责任环节，差异数据将汇入差错率统计。"
@@ -77,95 +77,101 @@
     </div>
 
     <!-- ======================= 表格 ======================= -->
-    <div class="card">
-      <el-table
-        v-loading="loading"
-        :data="rows"
-        stripe
-        height="calc(100vh - 640px)"
-        :row-class-name="rowClass"
-      >
-        <el-table-column label="复核单号" width="170" fixed>
-          <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="gotoExecute(row)">
-              <span class="mono">{{ row.reviewNo }}</span>
-            </el-link>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">
-            <StatusTag :code="row.status" group="reviewStatus" />
-          </template>
-        </el-table-column>
-        <el-table-column label="波次号" width="165">
-          <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="gotoWave(row.waveNo)">
-              <span class="mono">{{ row.waveNo }}</span>
-            </el-link>
-          </template>
-        </el-table-column>
-        <el-table-column label="订单号" width="165">
-          <template #default="{ row }">
-            <span class="mono">{{ row.orderNo }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="差异类型" width="110">
-          <template #default="{ row }">
-            <el-tag v-if="row.diffType && row.diffType !== 'NONE'" type="danger" size="small" effect="light">
-              {{ row.diffTypeDesc }}
-            </el-tag>
-            <span v-else class="text-secondary">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="应复核 / 实复核" width="150" align="center">
-          <template #default="{ row }">
-            <span class="num">{{ row.shouldQty }}</span>
-            <span class="text-secondary"> / </span>
-            <span class="num" :class="{ danger: row.diffQty > 0 }">{{ row.actualQty }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="差异件数" width="95" align="right">
-          <template #default="{ row }">
-            <span class="num" :class="{ danger: row.diffQty > 0 }">{{ row.diffQty || 0 }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="包装 / 包裹" width="140">
-          <template #default="{ row }">
-            <template v-if="row.status !== 'WAITING'">
-              <span>{{ row.packMaterial }}</span>
-              <span class="text-secondary"> · </span>
-              <span class="num">{{ row.packageCount }}</span> 件
+    <div class="card work-table-panel">
+      <div class="work-table-slot">
+        <el-table
+          v-loading="loading"
+          ref="table" :data="rows" @scroll="rememberScroll" empty-text="没有符合当前条件的记录"
+          stripe
+          height="100%"
+          :row-class-name="rowClass"
+        >
+          <el-table-column label="复核单号" width="170" fixed>
+            <template #default="{ row }">
+              <el-link type="primary" underline="never" @click="gotoExecute(row)">
+                <span class="mono">{{ row.reviewNo }}</span>
+              </el-link>
             </template>
-            <span v-else class="text-secondary">待打包</span>
+          </el-table-column>
+          <el-table-column label="状态" width="120">
+            <template #default="{ row }">
+              <StatusTag :code="row.status" group="reviewStatus" />
+            </template>
+          </el-table-column>
+          <el-table-column label="波次号" width="165">
+            <template #default="{ row }">
+              <el-link type="primary" underline="never" @click="gotoWave(row.waveNo)">
+                <span class="mono">{{ row.waveNo }}</span>
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="订单号" width="165">
+            <template #default="{ row }">
+              <span class="mono">{{ row.orderNo }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="差异类型" width="110">
+            <template #default="{ row }">
+              <el-tag v-if="row.diffType && row.diffType !== 'NONE'" type="danger" size="small" effect="light">
+                {{ row.diffTypeDesc }}
+              </el-tag>
+              <span v-else class="text-secondary">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="应复核 / 实复核" width="150" align="center">
+            <template #default="{ row }">
+              <span class="num">{{ row.shouldQty }}</span>
+              <span class="text-secondary"> / </span>
+              <span class="num" :class="{ danger: row.diffQty > 0 }">{{ row.actualQty }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="差异件数" width="95" align="right">
+            <template #default="{ row }">
+              <span class="num" :class="{ danger: row.diffQty > 0 }">{{ row.diffQty || 0 }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="包装 / 包裹" width="140">
+            <template #default="{ row }">
+              <template v-if="row.status !== 'WAITING'">
+                <span>{{ row.packMaterial }}</span>
+                <span class="text-secondary"> · </span>
+                <span class="num">{{ row.packageCount }}</span> 件
+              </template>
+              <span v-else class="text-secondary">待打包</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="重量" width="90" align="right">
+            <template #default="{ row }">
+              <span v-if="row.weight" class="num">{{ row.weight }} kg</span>
+              <span v-else class="text-secondary">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="复核员" width="90">
+            <template #default="{ row }">
+              <span v-if="row.reviewerName">{{ row.reviewerName }}</span>
+              <el-tag v-else type="warning" size="small" effect="plain">待认领</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="耗时" width="100" align="right">
+            <template #default="{ row }"><span class="num">{{ formatDuration(row.durationSec) }}</span></template>
+          </el-table-column>
+          <el-table-column label="完成时间" width="150">
+            <template #default="{ row }"><span class="text-secondary">{{ formatTimeShort(row.finishTime) }}</span></template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" fixed="right">
+            <template #default="{ row }">
+              <el-button v-if="row.status === 'WAITING'" link type="primary" size="small" @click="gotoExecute(row)">
+                去复核
+              </el-button>
+              <el-button v-else link size="small" @click="gotoExecute(row)">查看</el-button>
+            </template>
+          </el-table-column>
+          <template v-if="loadError" #empty>
+            <span role="alert">{{ loadError }}</span>
+            <el-button link type="primary" @click="load">重新加载</el-button>
           </template>
-        </el-table-column>
-        <el-table-column label="重量" width="90" align="right">
-          <template #default="{ row }">
-            <span v-if="row.weight" class="num">{{ row.weight }} kg</span>
-            <span v-else class="text-secondary">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="复核员" width="90">
-          <template #default="{ row }">
-            <span v-if="row.reviewerName">{{ row.reviewerName }}</span>
-            <el-tag v-else type="warning" size="small" effect="plain">待认领</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="耗时" width="100" align="right">
-          <template #default="{ row }"><span class="num">{{ formatDuration(row.durationSec) }}</span></template>
-        </el-table-column>
-        <el-table-column label="完成时间" width="150">
-          <template #default="{ row }"><span class="text-secondary">{{ formatTimeShort(row.finishTime) }}</span></template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button v-if="row.status === 'WAITING'" link type="primary" size="small" @click="gotoExecute(row)">
-              去复核
-            </el-button>
-            <el-button v-else link size="small" @click="gotoExecute(row)">查看</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        </el-table>
+      </div>
 
       <el-pagination
         v-model:current-page="query.pageNum"
@@ -181,6 +187,7 @@
 </template>
 
 <script setup>
+import { useWorkList } from '@/composables/useWorkList'
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -196,13 +203,10 @@ const router = useRouter()
 const dict = useDictStore()
 const app = useAppStore()
 
-const loading = ref(false)
-const rows = ref([])
-const total = ref(0)
 const pendingWaves = ref([])
 const claiming = ref('')
 
-const query = ref({
+const { query, rows, total, loading, loadError, table, rememberScroll, load } = useWorkList({
   pageNum: 1,
   pageSize: 20,
   reviewNo: '',
@@ -210,18 +214,7 @@ const query = ref({
   orderNo: '',
   status: '',
   diffType: ''
-})
-
-async function load() {
-  loading.value = true
-  try {
-    const res = await reviewApi.page(query.value)
-    rows.value = res.records
-    total.value = res.total
-  } finally {
-    loading.value = false
-  }
-}
+}, reviewApi.page)
 
 async function loadPending() {
   pendingWaves.value = await reviewApi.pendingWaves()

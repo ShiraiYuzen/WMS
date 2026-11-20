@@ -142,13 +142,13 @@ function onClick() {
 
 .sc-unit {
   font-size: 12px;
-  color: $text-placeholder;
+  color: $text-secondary;
 }
 
 .sc-sub {
   margin-top: 6px;
-  font-size: 11.5px;
-  color: $text-placeholder;
+  font-size: 12px;
+  color: $text-secondary;
 }
 
 .sc-icon {
