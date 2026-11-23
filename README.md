@@ -87,6 +87,10 @@
 
 ## 界面截图
 
+| 粒子首页 | 账号登录 |
+| --- | --- |
+| ![粒子首页](shots-v5/00-home.png) | ![账号登录](shots-v5/00-login.png) |
+
 | 看板 | 订单池 |
 | --- | --- |
 | ![看板](shots-v5/01-dashboard.png) | ![订单池](shots-v5/02-order-pool.png) |
