@@ -165,7 +165,7 @@ const GROUP_ORDER = ['总览', '作业闭环', '复盘与配置']
 
 /** 从路由表推导菜单，按角色过滤 */
 const menuGroups = computed(() => {
-  const layout = router.options.routes.find((r) => r.path === '/')
+  const layout = router.options.routes.find((r) => r.name === 'Workbench')
   const children = (layout?.children || []).filter((c) => !c.meta?.hidden)
 
   const groups = GROUP_ORDER.map((name) => ({
@@ -174,7 +174,7 @@ const menuGroups = computed(() => {
       .filter((c) => (c.meta?.group || '其他') === name)
       .filter((c) => app.canAccess(c.meta?.roles))
       .map((c) => ({
-        path: `/${c.path}`,
+        path: router.resolve({ name: c.name }).path,
         title: c.meta.title,
         icon: c.meta.icon || 'Menu'
       }))

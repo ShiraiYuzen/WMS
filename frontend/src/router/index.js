@@ -16,18 +16,25 @@ import MainLayout from '@/layouts/MainLayout.vue'
  */
 const routes = [
   {
+    path: '/',
+    name: 'Home',
+    component: () => import('@/views/login/index.vue'),
+    props: { showHome: true },
+    meta: { hidden: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/login/index.vue'),
     meta: { title: '登录', hidden: true }
   },
   {
-    path: '/',
+    path: '/dashboard',
+    name: 'Workbench',
     component: MainLayout,
-    redirect: '/dashboard',
     children: [
       {
-        path: 'dashboard',
+        path: '',
         name: 'Dashboard',
         component: () => import('@/views/dashboard/index.vue'),
         meta: { title: '作业看板', icon: 'Odometer', group: '总览' }
@@ -35,7 +42,7 @@ const routes = [
 
       /* ---------------- 订单汇聚 ---------------- */
       {
-        path: 'order',
+        path: '/order',
         name: 'OrderList',
         component: () => import('@/views/order/index.vue'),
         meta: { title: '订单池', icon: 'Tickets', group: '作业闭环', roles: ['WAVE_OPERATOR', 'ADMIN'] }
@@ -43,13 +50,13 @@ const routes = [
 
       /* ---------------- 波次生成 ---------------- */
       {
-        path: 'wave',
+        path: '/wave',
         name: 'WaveList',
         component: () => import('@/views/wave/index.vue'),
         meta: { title: '波次管理', icon: 'Grid', group: '作业闭环', roles: ['WAVE_OPERATOR', 'ADMIN'] }
       },
       {
-        path: 'wave/detail/:waveNo',
+        path: '/wave/detail/:waveNo',
         name: 'WaveDetail',
         component: () => import('@/views/wave/detail.vue'),
         meta: { title: '波次详情', hidden: true, activeMenu: '/wave' }
@@ -57,13 +64,13 @@ const routes = [
 
       /* ---------------- 拣货执行 ---------------- */
       {
-        path: 'pick',
+        path: '/pick',
         name: 'PickList',
         component: () => import('@/views/pick/index.vue'),
         meta: { title: '拣货任务', icon: 'Van', group: '作业闭环', roles: ['PICKER', 'WAVE_OPERATOR', 'ADMIN'] }
       },
       {
-        path: 'pick/execute/:taskNo',
+        path: '/pick/execute/:taskNo',
         name: 'PickExecute',
         component: () => import('@/views/pick/execute.vue'),
         meta: { title: '拣货作业', hidden: true, activeMenu: '/pick' }
@@ -71,7 +78,7 @@ const routes = [
 
       /* ---------------- 缺货处理 ---------------- */
       {
-        path: 'shortage',
+        path: '/shortage',
         name: 'ShortageList',
         component: () => import('@/views/shortage/index.vue'),
         meta: { title: '缺货处理', icon: 'Warning', group: '作业闭环', roles: ['WAVE_OPERATOR', 'ADMIN'] }
@@ -79,13 +86,13 @@ const routes = [
 
       /* ---------------- 复核打包 ---------------- */
       {
-        path: 'review',
+        path: '/review',
         name: 'ReviewList',
         component: () => import('@/views/review/index.vue'),
         meta: { title: '复核打包', icon: 'DocumentChecked', group: '作业闭环', roles: ['REVIEWER', 'ADMIN'] }
       },
       {
-        path: 'review/execute/:reviewNo',
+        path: '/review/execute/:reviewNo',
         name: 'ReviewExecute',
         component: () => import('@/views/review/execute.vue'),
         meta: { title: '复核作业', hidden: true, activeMenu: '/review' }
@@ -93,7 +100,7 @@ const routes = [
 
       /* ---------------- 出库交接 ---------------- */
       {
-        path: 'handover',
+        path: '/handover',
         name: 'HandoverList',
         component: () => import('@/views/handover/index.vue'),
         meta: { title: '出库交接', icon: 'Box', group: '作业闭环', roles: ['REVIEWER', 'ADMIN'] }
@@ -101,7 +108,7 @@ const routes = [
 
       /* ---------------- 效率复盘 ---------------- */
       {
-        path: 'analytics',
+        path: '/analytics',
         name: 'Analytics',
         component: () => import('@/views/analytics/index.vue'),
         meta: { title: '效率复盘', icon: 'TrendCharts', group: '复盘与配置', roles: ['ADMIN', 'WAVE_OPERATOR'] }
@@ -109,25 +116,25 @@ const routes = [
 
       /* ---------------- 基础数据 ---------------- */
       {
-        path: 'base/sku',
+        path: '/base/sku',
         name: 'BaseSku',
         component: () => import('@/views/base/sku.vue'),
         meta: { title: '商品档案', icon: 'Goods', group: '复盘与配置' }
       },
       {
-        path: 'base/location',
+        path: '/base/location',
         name: 'BaseLocation',
         component: () => import('@/views/base/location.vue'),
         meta: { title: '库位管理', icon: 'Coordinate', group: '复盘与配置' }
       },
       {
-        path: 'base/employee',
+        path: '/base/employee',
         name: 'BaseEmployee',
         component: () => import('@/views/base/employee.vue'),
         meta: { title: '人员管理', icon: 'User', group: '复盘与配置', roles: ['ADMIN'] }
       },
       {
-        path: 'base/carrier',
+        path: '/base/carrier',
         name: 'BaseCarrier',
         component: () => import('@/views/base/carrier.vue'),
         meta: { title: '承运商', icon: 'Van', group: '复盘与配置' }
@@ -154,18 +161,18 @@ router.afterEach((to) => {
 })
 
 /**
- * 登录守卫（WMS-v5 已接真实后端，未登录一律回登录页）。
+ * 首页和登录页允许访客访问，业务页要求登录。
  * 角色校验读 localStorage，避免在 router 初始化阶段依赖 Pinia 实例。
  */
 router.beforeEach((to) => {
   const token = localStorage.getItem('wms_token')
 
-  if (to.path === '/login') {
+  if (to.name === 'Home' || to.name === 'Login') {
     return token ? '/dashboard' : true
   }
 
   if (!token) {
-    return { path: '/login', query: to.fullPath === '/' ? undefined : { redirect: to.fullPath } }
+    return { path: '/login', query: { redirect: to.fullPath } }
   }
 
   const roles = to.meta?.roles
